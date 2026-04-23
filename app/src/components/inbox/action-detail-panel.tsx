@@ -6,12 +6,13 @@ import type { InboxAction } from '#/lib/inbox-logic'
 
 interface ActionDetailPanelProps {
   action: InboxAction | null
-  onApprove: (action: InboxAction) => Promise<void>
-  onEdit: (action: InboxAction, reply: string) => Promise<void>
-  onReject: (action: InboxAction) => Promise<void>
+  onApprove?: (action: InboxAction) => Promise<void>
+  onEdit?: (action: InboxAction, reply: string) => Promise<void>
+  onReject?: (action: InboxAction) => Promise<void>
+  readOnly?: boolean
 }
 
-export function ActionDetailPanel({ action, onApprove, onEdit, onReject }: ActionDetailPanelProps) {
+export function ActionDetailPanel({ action, onApprove, onEdit, onReject, readOnly = false }: ActionDetailPanelProps) {
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState('')
   const [busy, setBusy] = React.useState(false)
@@ -33,7 +34,7 @@ export function ActionDetailPanel({ action, onApprove, onEdit, onReject }: Actio
     )
   }
 
-  const isPending = action.status === 'PENDING'
+  const canAct = !readOnly && action.status === 'PENDING' && !!onApprove && !!onEdit && !!onReject
 
   async function run(fn: () => Promise<void>) {
     setBusy(true)
@@ -76,7 +77,7 @@ export function ActionDetailPanel({ action, onApprove, onEdit, onReject }: Actio
         <div>
           <div className="flex items-center justify-between mb-1.5">
             {label(`Draft reply (conf ${action.confidence.toFixed(2)})`)}
-            {isPending && !editing && (
+            {canAct && !editing && (
               <button
                 onClick={() => setEditing(true)}
                 className="text-[11px] flex items-center gap-1"
@@ -112,12 +113,12 @@ export function ActionDetailPanel({ action, onApprove, onEdit, onReject }: Actio
           <p className="text-[12px]" style={{ color: '#ef4444' }}>{error}</p>
         )}
 
-        {isPending && (
+        {canAct && (
           <div className="flex gap-2 mt-2">
             {editing ? (
               <>
                 <Button
-                  onClick={() => run(async () => { await onEdit(action, draft); setEditing(false) })}
+                  onClick={() => run(async () => { await onEdit!(action, draft); setEditing(false) })}
                   disabled={busy || !draft.trim()}
                   className="flex-1 flex items-center gap-1.5"
                   style={{ background: '#3b7ef8', color: '#fff' }}
@@ -136,7 +137,7 @@ export function ActionDetailPanel({ action, onApprove, onEdit, onReject }: Actio
             ) : (
               <>
                 <Button
-                  onClick={() => run(async () => { await onApprove(action) })}
+                  onClick={() => run(async () => { await onApprove!(action) })}
                   disabled={busy}
                   className="flex-1 flex items-center gap-1.5"
                   style={{ background: '#00c97a', color: '#0a0a0c' }}
@@ -144,7 +145,7 @@ export function ActionDetailPanel({ action, onApprove, onEdit, onReject }: Actio
                   <Check size={14} /> Approve
                 </Button>
                 <Button
-                  onClick={() => run(async () => { await onReject(action) })}
+                  onClick={() => run(async () => { await onReject!(action) })}
                   disabled={busy}
                   variant="ghost"
                   className="flex items-center gap-1.5"
