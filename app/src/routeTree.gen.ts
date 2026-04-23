@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode.dashboard'
+import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode.products'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const LoginRoute = LoginRouteImport.update({
@@ -29,6 +30,11 @@ const BusinessCodeDashboardRoute = BusinessCodeDashboardRouteImport.update({
   path: '/$businessCode/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BusinessCodeProductsRoute = BusinessCodeProductsRouteImport.update({
+  id: '/$businessCode/products',
+  path: '/$businessCode/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/$businessCode/dashboard' | '/api/auth/$'
+  fullPaths: '/' | '/login' | '/$businessCode/dashboard' | '/$businessCode/products' | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/$businessCode/dashboard' | '/api/auth/$'
-  id: '__root__' | '/' | '/login' | '/$businessCode/dashboard' | '/api/auth/$'
+  to: '/' | '/login' | '/$businessCode/dashboard' | '/$businessCode/products' | '/api/auth/$'
+  id: '__root__' | '/' | '/login' | '/$businessCode/dashboard' | '/$businessCode/products' | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   BusinessCodeDashboardRoute: typeof BusinessCodeDashboardRoute
+  BusinessCodeProductsRoute: typeof BusinessCodeProductsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BusinessCodeDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/products': {
+      id: '/$businessCode/products'
+      path: '/$businessCode/products'
+      fullPath: '/$businessCode/products'
+      preLoaderRoute: typeof BusinessCodeProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   BusinessCodeDashboardRoute: BusinessCodeDashboardRoute,
+  BusinessCodeProductsRoute: BusinessCodeProductsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
