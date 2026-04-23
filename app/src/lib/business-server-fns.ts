@@ -7,7 +7,7 @@ export const fetchBusinesses = createServerFn({ method: 'GET' }).handler(async (
 })
 
 export const createBusiness = createServerFn({ method: 'POST' })
-  .validator((data: unknown) => {
+  .inputValidator((data: unknown) => {
     const d = data as { name: string; mission?: string }
     if (!d.name || d.name.trim().length < 2) throw new Error('Name must be at least 2 characters')
     return { name: d.name.trim(), mission: d.mission?.trim() || undefined }
