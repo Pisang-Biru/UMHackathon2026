@@ -39,6 +39,11 @@ function toBarHeights(items: { label: string; count: number; color: string }[]) 
   }))
 }
 
+function normalizeActivity(counts: number[]): number[] {
+  const max = Math.max(...counts, 1)
+  return counts.map((c) => (c / max) * 100)
+}
+
 function DashboardPage() {
   const { businesses, current, dashboardStats } = Route.useLoaderData()
   const { agents, stats, charts } = dashboardStats
@@ -188,7 +193,7 @@ function DashboardPage() {
 
           {/* Charts */}
           <div className="grid gap-2.5" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr' }}>
-            <ActivityChart bars={charts.activity} />
+            <ActivityChart bars={normalizeActivity(charts.activity)} />
             <BarChart bars={toBarHeights(charts.byStatus)} title="Tasks by Status" />
             <BarChart bars={toBarHeights(charts.byAgent)} title="By Agent" />
             <SuccessRate percent={charts.successRate} />
