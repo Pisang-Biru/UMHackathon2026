@@ -69,14 +69,14 @@ Confidence guide:
 
 
 def build_customer_support_agent(llm):
-    def load_context(state: SupportAgentState) -> dict:
+    async def load_context(state: SupportAgentState) -> dict:
         context = _build_context(state["business_id"])
         return {"business_context": context}
 
-    def draft_reply(state: SupportAgentState) -> dict:
+    async def draft_reply(state: SupportAgentState) -> dict:
         system_prompt = SYSTEM_TEMPLATE.format(context=state["business_context"])
         messages = [SystemMessage(content=system_prompt)] + list(state["messages"])
-        response = llm.invoke(messages)
+        response = await llm.ainvoke(messages)
 
         content = response.content.strip()
         if content.startswith("```"):
@@ -99,14 +99,14 @@ def build_customer_support_agent(llm):
                 "reasoning": "Failed to parse structured output",
             }
 
-    def route_decision(state: SupportAgentState) -> dict:
+    async def route_decision(state: SupportAgentState) -> dict:
         action = "auto_send" if state["confidence"] >= 0.8 else "queue_approval"
         return {"action": action}
 
     def _route_edge(state: SupportAgentState) -> Literal["auto_send", "queue_approval"]:
         return state["action"]
 
-    def auto_send(state: SupportAgentState) -> dict:
+    async def auto_send(state: SupportAgentState) -> dict:
         customer_msg = state["messages"][-1].content if state["messages"] else ""
         action_id = cuid2.cuid()
         with SessionLocal() as session:
@@ -124,7 +124,7 @@ def build_customer_support_agent(llm):
             session.commit()
         return {"action_id": action_id}
 
-    def queue_approval(state: SupportAgentState) -> dict:
+    async def queue_approval(state: SupportAgentState) -> dict:
         customer_msg = state["messages"][-1].content if state["messages"] else ""
         action_id = cuid2.cuid()
         with SessionLocal() as session:
