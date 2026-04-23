@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   LayoutDashboard, CircleDot, RefreshCw, Target,
-  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag,
+  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag, Inbox,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { ScrollArea } from '#/components/ui/scroll-area'
@@ -28,6 +28,7 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Dashboard', route: 'dashboard' },
+  { icon: Inbox, label: 'Inbox', route: 'inbox' },
   { icon: ShoppingBag, label: 'Products', route: 'products' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
