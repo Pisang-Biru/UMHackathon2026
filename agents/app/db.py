@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, String, Float, Integer, Text, DateTime, Enum as SAEnum
+from sqlalchemy import create_engine, Column, String, Float, Integer, Text, DateTime, Enum as SAEnum, Numeric
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from datetime import datetime, timezone
 import enum
@@ -32,7 +32,7 @@ class Product(Base):
     __tablename__ = "product"
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
-    price = Column(Float, nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
     stock = Column(Integer, nullable=False, default=0)
     description = Column(Text, nullable=True)
     businessId = Column(String, nullable=False)
