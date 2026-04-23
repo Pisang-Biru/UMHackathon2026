@@ -1,7 +1,15 @@
 import { createServerFn } from '@tanstack/react-start'
+import { redirect } from '@tanstack/react-router'
 import { prisma } from '#/db'
 import { generateUniqueCode } from '#/lib/business-code'
-import { requireSession } from '#/lib/session'
+import { auth } from '#/lib/auth'
+
+async function requireSession() {
+  const { getRequest } = await import('@tanstack/react-start/server')
+  const session = await auth.api.getSession({ headers: getRequest().headers })
+  if (!session) throw redirect({ to: '/login' })
+  return session
+}
 
 export const fetchBusinesses = createServerFn({ method: 'GET' }).handler(async () => {
   const session = await requireSession()
@@ -25,12 +33,10 @@ export const createBusiness = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }) => {
     const session = await requireSession()
-
     const code = await generateUniqueCode(data.name, async (c) => {
       const existing = await prisma.business.findUnique({ where: { code: c } })
       return existing !== null
     })
-
     return prisma.business.create({
       data: { name: data.name, code, mission: data.mission, userId: session.user.id },
     })
