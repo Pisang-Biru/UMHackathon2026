@@ -69,10 +69,14 @@ function InboxPage() {
   async function handleSelect(action: InboxAction) {
     setSelectedId(action.id)
     if (!action.viewedAt) {
-      const updated = await markAsViewed({ data: { actionId: action.id } })
-      const u = normalize(updated)
-      setActions((prev) => prev.map((a) => (a.id === u.id ? u : a)))
-      refreshCounts()
+      try {
+        const updated = await markAsViewed({ data: { actionId: action.id } })
+        const u = normalize(updated)
+        setActions((prev) => prev.map((a) => (a.id === u.id ? u : a)))
+        await refreshCounts()
+      } catch (err) {
+        console.error('Failed to mark as viewed', err)
+      }
     }
   }
 
@@ -80,7 +84,7 @@ function InboxPage() {
     const updated = await approveAction({ data: { actionId: action.id } })
     const u = normalize(updated)
     setActions((prev) => (tab === 'mine' ? prev.filter((a) => a.id !== u.id) : prev.map((a) => (a.id === u.id ? u : a))))
-    refreshCounts()
+    await refreshCounts()
     setSelectedId(null)
   }
 
@@ -88,7 +92,7 @@ function InboxPage() {
     const updated = await editAction({ data: { actionId: action.id, reply } })
     const u = normalize(updated)
     setActions((prev) => (tab === 'mine' ? prev.filter((a) => a.id !== u.id) : prev.map((a) => (a.id === u.id ? u : a))))
-    refreshCounts()
+    await refreshCounts()
     setSelectedId(null)
   }
 
@@ -96,7 +100,7 @@ function InboxPage() {
     const updated = await rejectAction({ data: { actionId: action.id } })
     const u = normalize(updated)
     setActions((prev) => (tab === 'mine' ? prev.filter((a) => a.id !== u.id) : prev.map((a) => (a.id === u.id ? u : a))))
-    refreshCounts()
+    await refreshCounts()
     setSelectedId(null)
   }
 
