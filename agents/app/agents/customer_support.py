@@ -1,5 +1,6 @@
 import json
-import cuid2
+from cuid2 import Cuid as _Cuid
+generate_cuid = _Cuid().generate
 from typing import Annotated, Literal
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -108,7 +109,7 @@ def build_customer_support_agent(llm):
 
     async def auto_send(state: SupportAgentState) -> dict:
         customer_msg = state["messages"][-1].content if state["messages"] else ""
-        action_id = cuid2.cuid()
+        action_id = generate_cuid()
         with SessionLocal() as session:
             record = AgentAction(
                 id=action_id,
@@ -126,7 +127,7 @@ def build_customer_support_agent(llm):
 
     async def queue_approval(state: SupportAgentState) -> dict:
         customer_msg = state["messages"][-1].content if state["messages"] else ""
-        action_id = cuid2.cuid()
+        action_id = generate_cuid()
         with SessionLocal() as session:
             record = AgentAction(
                 id=action_id,

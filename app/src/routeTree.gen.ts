@@ -11,8 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode.dashboard'
 import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode.products'
+import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode.dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const LoginRoute = LoginRouteImport.update({
@@ -25,14 +25,14 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BusinessCodeDashboardRoute = BusinessCodeDashboardRouteImport.update({
-  id: '/$businessCode/dashboard',
-  path: '/$businessCode/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const BusinessCodeProductsRoute = BusinessCodeProductsRouteImport.update({
   id: '/$businessCode/products',
   path: '/$businessCode/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessCodeDashboardRoute = BusinessCodeDashboardRouteImport.update({
+  id: '/$businessCode/dashboard',
+  path: '/$businessCode/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -65,10 +65,26 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/$businessCode/dashboard' | '/$businessCode/products' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/$businessCode/dashboard'
+    | '/$businessCode/products'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/$businessCode/dashboard' | '/$businessCode/products' | '/api/auth/$'
-  id: '__root__' | '/' | '/login' | '/$businessCode/dashboard' | '/$businessCode/products' | '/api/auth/$'
+  to:
+    | '/'
+    | '/login'
+    | '/$businessCode/dashboard'
+    | '/$businessCode/products'
+    | '/api/auth/$'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/$businessCode/dashboard'
+    | '/$businessCode/products'
+    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -95,18 +111,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$businessCode/dashboard': {
-      id: '/$businessCode/dashboard'
-      path: '/$businessCode/dashboard'
-      fullPath: '/$businessCode/dashboard'
-      preLoaderRoute: typeof BusinessCodeDashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/$businessCode/products': {
       id: '/$businessCode/products'
       path: '/$businessCode/products'
       fullPath: '/$businessCode/products'
       preLoaderRoute: typeof BusinessCodeProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$businessCode/dashboard': {
+      id: '/$businessCode/dashboard'
+      path: '/$businessCode/dashboard'
+      fullPath: '/$businessCode/dashboard'
+      preLoaderRoute: typeof BusinessCodeDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {

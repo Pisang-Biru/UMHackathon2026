@@ -11,8 +11,8 @@ from app.routers.support import make_support_router
 
 llm = ChatOpenAI(
     model="ilmu-glm-5.1",
-    openai_api_key=os.getenv("ZAI_API_KEY"),
-    openai_api_base="https://api.ilmu.ai/v1/",
+    openai_api_key=os.getenv("API_KEY"),
+    openai_api_base=os.getenv("OPENAI_API_BASE")
     temperature=0.6,
 )
 
