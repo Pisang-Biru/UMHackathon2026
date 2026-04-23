@@ -11,9 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode.products'
-import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode.inbox'
-import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode.dashboard'
+import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode/products'
+import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/inbox'
+import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const LoginRoute = LoginRouteImport.update({
