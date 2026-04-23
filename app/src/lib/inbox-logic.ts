@@ -41,8 +41,11 @@ export function matchesTab(action: InboxAction, tab: InboxTab, now: Date = new D
     case 'mine':
       return action.status === 'PENDING'
     case 'recent':
-      return now.getTime() - action.createdAt.getTime() <= SEVEN_DAYS_MS
+      return (
+        action.status !== 'AUTO_SENT' &&
+        now.getTime() - action.createdAt.getTime() <= SEVEN_DAYS_MS
+      )
     case 'unread':
-      return action.viewedAt === null
+      return action.viewedAt === null && action.status !== 'AUTO_SENT'
   }
 }

@@ -57,16 +57,18 @@ describe('matchesTab', () => {
     expect(matchesTab(mk({ status: 'AUTO_SENT' }), 'mine', now)).toBe(false)
   })
 
-  it('recent: within last 7 days any status', () => {
+  it('recent: within last 7 days and not AUTO_SENT', () => {
     const recent = new Date('2026-04-22T12:00:00Z')
     const old = new Date('2026-04-10T12:00:00Z')
     expect(matchesTab(mk({ createdAt: recent, status: 'APPROVED' }), 'recent', now)).toBe(true)
-    expect(matchesTab(mk({ createdAt: recent, status: 'AUTO_SENT' }), 'recent', now)).toBe(true)
-    expect(matchesTab(mk({ createdAt: old }), 'recent', now)).toBe(false)
+    expect(matchesTab(mk({ createdAt: recent, status: 'PENDING' }), 'recent', now)).toBe(true)
+    expect(matchesTab(mk({ createdAt: recent, status: 'AUTO_SENT' }), 'recent', now)).toBe(false)
+    expect(matchesTab(mk({ createdAt: old, status: 'APPROVED' }), 'recent', now)).toBe(false)
   })
 
-  it('unread: only when viewedAt is null', () => {
-    expect(matchesTab(mk({ viewedAt: null }), 'unread', now)).toBe(true)
-    expect(matchesTab(mk({ viewedAt: new Date() }), 'unread', now)).toBe(false)
+  it('unread: only when viewedAt is null and not AUTO_SENT', () => {
+    expect(matchesTab(mk({ viewedAt: null, status: 'PENDING' }), 'unread', now)).toBe(true)
+    expect(matchesTab(mk({ viewedAt: null, status: 'AUTO_SENT' }), 'unread', now)).toBe(false)
+    expect(matchesTab(mk({ viewedAt: new Date(), status: 'PENDING' }), 'unread', now)).toBe(false)
   })
 })

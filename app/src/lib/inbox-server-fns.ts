@@ -49,9 +49,13 @@ export const fetchInbox = createServerFn({ method: 'GET' })
     if (data.tab === 'mine') {
       where = { ...whereBase, status: 'PENDING' }
     } else if (data.tab === 'recent') {
-      where = { ...whereBase, createdAt: { gte: new Date(Date.now() - SEVEN_DAYS_MS) } }
+      where = {
+        ...whereBase,
+        status: { not: 'AUTO_SENT' },
+        createdAt: { gte: new Date(Date.now() - SEVEN_DAYS_MS) },
+      }
     } else if (data.tab === 'unread') {
-      where = { ...whereBase, viewedAt: null }
+      where = { ...whereBase, status: { not: 'AUTO_SENT' }, viewedAt: null }
     }
 
     return prisma.agentAction.findMany({
@@ -74,9 +78,15 @@ export const fetchTabCounts = createServerFn({ method: 'GET' })
     const [mine, recent, unread] = await Promise.all([
       prisma.agentAction.count({ where: { businessId: data.businessId, status: 'PENDING' } }),
       prisma.agentAction.count({
-        where: { businessId: data.businessId, createdAt: { gte: new Date(Date.now() - SEVEN_DAYS_MS) } },
+        where: {
+          businessId: data.businessId,
+          status: { not: 'AUTO_SENT' },
+          createdAt: { gte: new Date(Date.now() - SEVEN_DAYS_MS) },
+        },
       }),
-      prisma.agentAction.count({ where: { businessId: data.businessId, viewedAt: null } }),
+      prisma.agentAction.count({
+        where: { businessId: data.businessId, status: { not: 'AUTO_SENT' }, viewedAt: null },
+      }),
     ])
     return { mine, recent, unread }
   })
