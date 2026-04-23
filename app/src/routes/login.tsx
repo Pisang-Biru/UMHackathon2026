@@ -19,10 +19,15 @@ function LoginPage() {
 
   async function handleGoogleSignIn() {
     setLoading(true)
-    await authClient.signIn.social({
-      provider: 'google',
-      callbackURL: '/',
-    })
+    try {
+      await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: '/',
+      })
+    } catch (err) {
+      console.error('Sign-in failed', err)
+      setLoading(false)
+    }
   }
 
   return (

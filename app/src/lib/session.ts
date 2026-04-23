@@ -13,5 +13,6 @@ export const requireSession = async () => {
 
 export const getSession = createServerFn({ method: 'GET' }).handler(async () => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() as Headers })
-  return session ?? null
+  if (!session) return null
+  return { userId: session.user.id, email: session.user.email }
 })

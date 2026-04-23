@@ -1,3 +1,4 @@
+import React from 'react'
 import {
   LayoutDashboard, CircleDot, RefreshCw, Target, Rocket,
   Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut,
@@ -40,15 +41,22 @@ const PRODUCT_ITEMS = [
 ]
 
 function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 }
 
 export function Sidebar({ business, agents = [] }: SidebarProps) {
   const navigate = useNavigate()
+  const [signingOut, setSigningOut] = React.useState(false)
 
   async function handleSignOut() {
-    await authClient.signOut()
-    await navigate({ to: '/login' })
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await authClient.signOut()
+    } catch (err) {
+      console.error('Sign-out failed', err)
+    }
+    navigate({ to: '/login' })
   }
 
   return (
@@ -171,11 +179,12 @@ export function Sidebar({ business, agents = [] }: SidebarProps) {
         </button>
         <button
           onClick={handleSignOut}
-          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
+          disabled={signingOut}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5 disabled:opacity-50"
           style={{ color: '#555' }}
         >
           <LogOut size={13} />
-          <span>Sign out</span>
+          <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
         </button>
       </div>
     </aside>

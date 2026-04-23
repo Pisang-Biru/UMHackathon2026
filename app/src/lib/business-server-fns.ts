@@ -13,9 +13,15 @@ export const fetchBusinesses = createServerFn({ method: 'GET' }).handler(async (
 
 export const createBusiness = createServerFn({ method: 'POST' })
   .inputValidator((data: unknown) => {
+    if (typeof data !== 'object' || data === null || typeof (data as Record<string, unknown>).name !== 'string') {
+      throw new Error('Invalid input')
+    }
     const d = data as { name: string; mission?: string }
-    if (!d.name || d.name.trim().length < 2) throw new Error('Name must be at least 2 characters')
-    return { name: d.name.trim(), mission: d.mission?.trim() || undefined }
+    if (d.name.trim().length < 2) throw new Error('Name must be at least 2 characters')
+    return {
+      name: d.name.trim(),
+      mission: typeof d.mission === 'string' ? d.mission.trim() || undefined : undefined,
+    }
   })
   .handler(async ({ data }) => {
     const session = await requireSession()
