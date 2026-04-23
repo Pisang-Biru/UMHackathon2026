@@ -85,7 +85,7 @@ export const updateProduct = createServerFn({ method: 'POST' })
     if (!product || product.business.userId !== session.user.id) throw new Error('Product not found or access denied')
     const updated = await prisma.product.update({
       where: { id: data.id },
-      data: { name: data.name, price: data.price, stock: data.stock, description: data.description },
+      data: { name: data.name, price: data.price, stock: data.stock, description: data.description ?? null },
     })
     return { ...updated, price: updated.price.toNumber() }
   })
