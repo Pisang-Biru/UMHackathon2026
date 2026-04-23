@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupByAgent, matchesTab, type InboxTab, type InboxAction } from '#/lib/inbox-logic'
+import { groupByAgent, matchesTab, type InboxAction } from '#/lib/inbox-logic'
 
 function mk(overrides: Partial<InboxAction> = {}): InboxAction {
   return {
