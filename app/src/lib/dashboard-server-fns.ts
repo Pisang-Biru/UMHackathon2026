@@ -20,6 +20,13 @@ async function requireBusinessOwner(businessId: string, userId: string) {
 
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
 
+const STATUS_COLORS: Record<string, string> = {
+  PENDING: '#f59e0b',
+  APPROVED: '#00c97a',
+  REJECTED: '#ef4444',
+  AUTO_SENT: '#3b7ef8',
+}
+
 export const fetchDashboardStats = createServerFn({ method: 'GET' })
   .inputValidator((data: unknown) => {
     if (
@@ -67,13 +74,6 @@ export const fetchDashboardStats = createServerFn({ method: 'GET' })
     const countByAgent = new Map<string, number>()
     for (const a of allActions) {
       countByAgent.set(a.agentType, (countByAgent.get(a.agentType) ?? 0) + 1)
-    }
-
-    const STATUS_COLORS: Record<string, string> = {
-      PENDING: '#f59e0b',
-      APPROVED: '#00c97a',
-      REJECTED: '#ef4444',
-      AUTO_SENT: '#3b7ef8',
     }
 
     return {
