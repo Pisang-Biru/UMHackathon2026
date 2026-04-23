@@ -24,8 +24,10 @@ export function computeSuccessRate(
   return total === 0 ? 0 : Math.round((approved / total) * 100)
 }
 
+type DbActionStatus = 'PENDING' | 'AUTO_SENT' | 'APPROVED' | 'REJECTED' | null
+
 export function mapAgentStatus(
-  latestStatus: string | null
+  latestStatus: DbActionStatus
 ): 'live' | 'running' | 'finished' | 'idle' {
   if (latestStatus === 'PENDING') return 'live'
   if (latestStatus === 'AUTO_SENT') return 'running'
@@ -45,11 +47,12 @@ export function formatRelativeTime(date: Date, now: Date = new Date()): string {
 }
 
 export function buildAgentCards(
-  actions: { agentType: string; status: string; customerMsg: string; createdAt: Date }[],
+  actions: { agentType: string; status: DbActionStatus; customerMsg: string; createdAt: Date }[],
   now: Date = new Date()
 ): AgentCardData[] {
-  const latestByAgent = new Map<string, (typeof actions)[0]>()
-  for (const action of actions) {
+  const sorted = [...actions].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  const latestByAgent = new Map<string, (typeof sorted)[0]>()
+  for (const action of sorted) {
     if (!latestByAgent.has(action.agentType)) {
       latestByAgent.set(action.agentType, action)
     }
