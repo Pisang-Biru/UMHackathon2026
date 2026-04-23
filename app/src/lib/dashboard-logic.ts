@@ -24,7 +24,7 @@ export function computeSuccessRate(
   return total === 0 ? 0 : Math.round((approved / total) * 100)
 }
 
-type DbActionStatus = 'PENDING' | 'AUTO_SENT' | 'APPROVED' | 'REJECTED' | null
+export type DbActionStatus = 'PENDING' | 'AUTO_SENT' | 'APPROVED' | 'REJECTED' | null
 
 export function mapAgentStatus(
   latestStatus: DbActionStatus

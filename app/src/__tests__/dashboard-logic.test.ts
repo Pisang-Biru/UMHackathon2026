@@ -3,6 +3,7 @@ import {
   bucketActivity,
   computeSuccessRate,
   mapAgentStatus,
+  type DbActionStatus,
   formatRelativeTime,
   buildAgentCards,
 } from '#/lib/dashboard-logic'
@@ -125,7 +126,7 @@ describe('formatRelativeTime', () => {
 })
 
 describe('buildAgentCards', () => {
-  const makeAction = (agentType: string, status: string, customerMsg = 'hello', createdAt = NOW) => ({
+  const makeAction = (agentType: string, status: DbActionStatus, customerMsg = 'hello', createdAt = NOW) => ({
     agentType,
     status,
     customerMsg,
