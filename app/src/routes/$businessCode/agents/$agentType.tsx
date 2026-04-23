@@ -11,10 +11,7 @@ import { DashboardTab } from '#/components/agents/dashboard-tab'
 import { RunsTab } from '#/components/agents/runs-tab'
 import { BudgetTab } from '#/components/agents/budget-tab'
 import type { InboxAction, AgentActionStatus } from '#/lib/inbox-logic'
-
-const AGENT_META: Record<string, { name: string; color: string }> = {
-  support: { name: 'Support Agent', color: '#3b7ef8' },
-}
+import { getAgentMeta } from '#/lib/agent-meta'
 
 type FilterStatus = 'ALL' | AgentActionStatus
 
@@ -58,7 +55,7 @@ function AgentPage() {
   const { businesses, current, agentType, stats } = Route.useLoaderData()
   const search = Route.useSearch()
   const navigate = useNavigate()
-  const meta = AGENT_META[agentType] ?? { name: agentType, color: '#888' }
+  const meta = getAgentMeta(agentType)
 
   const [runsRows, setRunsRows] = React.useState<InboxAction[]>([])
   const [runsCursor, setRunsCursor] = React.useState<string | null>(null)
