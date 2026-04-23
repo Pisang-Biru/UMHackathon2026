@@ -10,9 +10,9 @@ from app.routers.agent import make_agent_router
 from app.routers.support import make_support_router
 
 llm = ChatOpenAI(
-    model="ilmu-glm-5.1",
+    model=os.getenv("MODEL"),
     openai_api_key=os.getenv("API_KEY"),
-    openai_api_base=os.getenv("OPENAI_API_BASE")
+    openai_api_base=os.getenv("OPENAI_API_BASE"),
     temperature=0.6,
 )
 
