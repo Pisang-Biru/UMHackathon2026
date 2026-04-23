@@ -124,6 +124,12 @@ model AgentAction {
   confidence  Float
   reasoning   String
   status      AgentActionStatus @default(PENDING)
+  viewedAt    DateTime?
+  agentType   String            @default("support")
+  inputTokens   Int?
+  outputTokens  Int?
+  cachedTokens  Int?
+  costUsd       Decimal? @db.Decimal(10, 6)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 

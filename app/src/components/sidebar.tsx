@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   LayoutDashboard, CircleDot, RefreshCw, Target,
-  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag,
+  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag, Inbox,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { ScrollArea } from '#/components/ui/scroll-area'
@@ -24,10 +24,12 @@ interface Business {
 interface SidebarProps {
   business: Business
   agents?: Agent[]
+  activeAgentType?: string
 }
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Dashboard', route: 'dashboard' },
+  { icon: Inbox, label: 'Inbox', route: 'inbox' },
   { icon: ShoppingBag, label: 'Products', route: 'products' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
@@ -44,7 +46,7 @@ function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 }
 
-export function Sidebar({ business, agents = [] }: SidebarProps) {
+export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps) {
   const navigate = useNavigate()
   const [signingOut, setSigningOut] = React.useState(false)
 
@@ -121,25 +123,36 @@ export function Sidebar({ business, agents = [] }: SidebarProps) {
             Agents
           </p>
           <div className="space-y-0.5 mb-4">
-            {agents.map((agent) => (
-              <button
-                key={agent.id}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
-                style={{ color: '#555' }}
-              >
-                <div
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ background: agent.color + '25', border: `1.5px solid ${agent.color}50` }}
-                />
-                <span className="flex-1 text-left truncate">{agent.name}</span>
-                {agent.live && (
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: '#00c97a', animation: 'pulse-dot 1.8s ease-in-out infinite' }}
+            {agents.map((agent) => {
+              const active = agent.id === activeAgentType
+              return (
+                <button
+                  key={agent.id}
+                  onClick={() => navigate({
+                    to: '/$businessCode/agents/$agentType',
+                    params: { businessCode: business.code, agentType: agent.id },
+                  } as any)}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
+                  style={{
+                    color: active ? '#e8e6e2' : '#555',
+                    background: active ? '#16161a' : 'transparent',
+                    border: active ? '1px solid #1e1e24' : '1px solid transparent',
+                  }}
+                >
+                  <div
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ background: agent.color + '25', border: `1.5px solid ${agent.color}50` }}
                   />
-                )}
-              </button>
-            ))}
+                  <span className="flex-1 text-left truncate">{agent.name}</span>
+                  {agent.live && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: '#00c97a', animation: 'pulse-dot 1.8s ease-in-out infinite' }}
+                    />
+                  )}
+                </button>
+              )
+            })}
             <button
               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
               style={{ color: '#2a2a32' }}
