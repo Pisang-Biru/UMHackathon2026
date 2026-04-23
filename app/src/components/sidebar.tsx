@@ -1,7 +1,7 @@
 import React from 'react'
 import {
-  LayoutDashboard, CircleDot, RefreshCw, Target, Rocket,
-  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut,
+  LayoutDashboard, CircleDot, RefreshCw, Target,
+  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { ScrollArea } from '#/components/ui/scroll-area'
@@ -27,11 +27,11 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard', active: true },
+  { icon: LayoutDashboard, label: 'Dashboard', route: 'dashboard' },
+  { icon: ShoppingBag, label: 'Products', route: 'products' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
   { icon: Target, label: 'Goals' },
-  { icon: Rocket, label: 'Onboarding' },
 ]
 
 const PRODUCT_ITEMS = [
@@ -88,9 +88,13 @@ export function Sidebar({ business, agents = [] }: SidebarProps) {
               <button
                 key={item.label}
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
+                onClick={() => {
+                  if ('route' in item && item.route) {
+                    navigate({ to: '/$businessCode/' + item.route as any, params: { businessCode: business.code } } as any)
+                  }
+                }}
                 style={{
-                  background: item.active ? 'rgba(255,255,255,0.07)' : 'transparent',
-                  color: item.active ? '#e8e6e2' : '#555',
+                  color: '#555',
                 }}
               >
                 <item.icon size={13} />

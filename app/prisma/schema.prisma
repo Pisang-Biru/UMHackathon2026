@@ -79,14 +79,53 @@ model Verification {
 }
 
 model Business {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  mission   String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String        @id @default(cuid())
+  name         String
+  code         String        @unique
+  mission      String?
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products     Product[]
+  agentActions AgentAction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@map("business")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  price       Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  description String?
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("product")
+}
+
+enum AgentActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  AUTO_SENT
+}
+
+model AgentAction {
+  id          String            @id @default(cuid())
+  businessId  String
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerMsg String
+  draftReply  String
+  finalReply  String?
+  confidence  Float
+  reasoning   String
+  status      AgentActionStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("agent_action")
 }
