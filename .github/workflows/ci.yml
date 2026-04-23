@@ -57,4 +57,4 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Check syntax
-        run: python -m py_compile main.py
+        run: python -m compileall .
