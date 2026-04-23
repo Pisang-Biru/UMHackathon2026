@@ -30,6 +30,10 @@ async function requireActionOwner(actionId: string, userId: string) {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
+function serializeAction(a: any) {
+  return { ...a, costUsd: a.costUsd == null ? null : a.costUsd.toNumber() }
+}
+
 export const fetchInbox = createServerFn({ method: 'GET' })
   .inputValidator((data: unknown) => {
     if (typeof data !== 'object' || data === null) throw new Error('Invalid input')
@@ -58,10 +62,11 @@ export const fetchInbox = createServerFn({ method: 'GET' })
       where = { ...whereBase, status: { not: 'AUTO_SENT' }, viewedAt: null }
     }
 
-    return prisma.agentAction.findMany({
+    const actions = await prisma.agentAction.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     })
+    return actions.map(serializeAction)
   })
 
 export const fetchTabCounts = createServerFn({ method: 'GET' })
@@ -101,11 +106,12 @@ export const markAsViewed = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const session = await requireSession()
     const action = await requireActionOwner(data.actionId, session.user.id)
-    if (action.viewedAt) return action
-    return prisma.agentAction.update({
+    if (action.viewedAt) return serializeAction(action)
+    const updated = await prisma.agentAction.update({
       where: { id: data.actionId },
       data: { viewedAt: new Date() },
     })
+    return serializeAction(updated)
   })
 
 export const approveAction = createServerFn({ method: 'POST' })
@@ -119,10 +125,11 @@ export const approveAction = createServerFn({ method: 'POST' })
     const session = await requireSession()
     const action = await requireActionOwner(data.actionId, session.user.id)
     if (action.status !== 'PENDING') throw new Error(`Action is ${action.status}, not PENDING`)
-    return prisma.agentAction.update({
+    const updated = await prisma.agentAction.update({
       where: { id: data.actionId },
       data: { status: 'APPROVED', finalReply: action.draftReply },
     })
+    return serializeAction(updated)
   })
 
 export const editAction = createServerFn({ method: 'POST' })
@@ -137,10 +144,11 @@ export const editAction = createServerFn({ method: 'POST' })
     const session = await requireSession()
     const action = await requireActionOwner(data.actionId, session.user.id)
     if (action.status !== 'PENDING') throw new Error(`Action is ${action.status}, not PENDING`)
-    return prisma.agentAction.update({
+    const updated = await prisma.agentAction.update({
       where: { id: data.actionId },
       data: { status: 'APPROVED', finalReply: data.reply },
     })
+    return serializeAction(updated)
   })
 
 export const rejectAction = createServerFn({ method: 'POST' })
@@ -154,8 +162,9 @@ export const rejectAction = createServerFn({ method: 'POST' })
     const session = await requireSession()
     const action = await requireActionOwner(data.actionId, session.user.id)
     if (action.status !== 'PENDING') throw new Error(`Action is ${action.status}, not PENDING`)
-    return prisma.agentAction.update({
+    const updated = await prisma.agentAction.update({
       where: { id: data.actionId },
       data: { status: 'REJECTED' },
     })
+    return serializeAction(updated)
   })
