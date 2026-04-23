@@ -11,18 +11,29 @@
 }
 
 :root {
-  --sidebar-bg: #0c0c0e;
+  --bg-base: #0a0a0c;
+  --bg-surface: #111113;
+  --bg-card: #161618;
+  --bg-raised: #0c0c0f;
+  --border: #1a1a1e;
+  --text-primary: #f0ede8;
+  --text-muted: #555555;
+  --accent-blue: #3b7ef8;
+  --accent-green: #00c97a;
+  --accent-amber: #f59e0b;
+
+  /* keep legacy names for existing refs during refactor */
+  --sidebar-bg: #0c0c0f;
   --sidebar-text: #a8a6a2;
   --sidebar-text-active: #f0ede8;
-  --sidebar-border: #1e1e22;
-  --main-bg: #f5f3ef;
-  --card-bg: #ffffff;
-  --text-primary: #0c0c0e;
-  --text-muted: #8a8680;
+  --sidebar-border: #1a1a1e;
+  --main-bg: #111113;
+  --card-bg: #161618;
+  --text-primary: #f0ede8;
   --accent-live: #00c97a;
   --accent-running: #3b7ef8;
   --accent-queued: #f59e0b;
-  --accent-border: #e8e4dd;
+  --accent-border: #1a1a1e;
 }
 
 * {
@@ -31,7 +42,8 @@
 
 body {
   font-family: var(--font-sans);
-  background: var(--main-bg);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 @keyframes pulse-dot {
