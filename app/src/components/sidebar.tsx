@@ -1,9 +1,11 @@
 import {
   LayoutDashboard, CircleDot, RefreshCw, Target, Rocket,
-  Building2, Brain, Wheat, Settings, ChevronDown, Plus,
+  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut,
 } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import { ScrollArea } from '#/components/ui/scroll-area'
 import { Separator } from '#/components/ui/separator'
+import { authClient } from '#/lib/auth-client'
 
 interface Agent {
   id: string
@@ -42,6 +44,13 @@ function initials(name: string): string {
 }
 
 export function Sidebar({ business, agents = [] }: SidebarProps) {
+  const navigate = useNavigate()
+
+  async function handleSignOut() {
+    await authClient.signOut()
+    await navigate({ to: '/login' })
+  }
+
   return (
     <aside
       className="w-[210px] shrink-0 flex flex-col h-full"
@@ -152,13 +161,21 @@ export function Sidebar({ business, agents = [] }: SidebarProps) {
         </div>
       </ScrollArea>
 
-      <div className="px-2 py-2 border-t" style={{ borderColor: '#1a1a1e' }}>
+      <div className="px-2 py-2 border-t flex flex-col gap-0.5" style={{ borderColor: '#1a1a1e' }}>
         <button
           className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
           style={{ color: '#555' }}
         >
           <Settings size={13} />
           <span>Settings</span>
+        </button>
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
+          style={{ color: '#555' }}
+        >
+          <LogOut size={13} />
+          <span>Sign out</span>
         </button>
       </div>
     </aside>

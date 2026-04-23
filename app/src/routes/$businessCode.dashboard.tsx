@@ -1,4 +1,4 @@
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Users, Play, DollarSign, CheckSquare, Zap } from 'lucide-react'
 import { fetchBusinesses } from '#/lib/business-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
@@ -11,7 +11,15 @@ export const Route = createFileRoute('/$businessCode/dashboard')({
   loader: async ({ params }) => {
     const businesses = await fetchBusinesses()
     const current = businesses.find((b) => b.code === params.businessCode)
-    if (!current) throw notFound()
+    if (!current) {
+      if (businesses.length > 0) {
+        throw redirect({
+          to: '/$businessCode/dashboard',
+          params: { businessCode: businesses[0].code },
+        })
+      }
+      throw redirect({ to: '/' })
+    }
     return { businesses, current }
   },
   component: DashboardPage,
