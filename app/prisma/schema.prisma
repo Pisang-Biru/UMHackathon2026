@@ -124,6 +124,8 @@ model AgentAction {
   confidence  Float
   reasoning   String
   status      AgentActionStatus @default(PENDING)
+  viewedAt    DateTime?
+  agentType   String            @default("support")
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
