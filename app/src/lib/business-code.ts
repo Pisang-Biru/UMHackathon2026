@@ -18,7 +18,7 @@ export async function generateUniqueCode(
   const stripped = name.replace(/[^a-zA-Z]/g, '').toUpperCase()
   if (stripped.length === 0) throw new Error('Business name must contain letters')
 
-  for (let len = 3; len <= stripped.length; len++) {
+  for (let len = Math.min(3, stripped.length); len <= stripped.length; len++) {
     const code = stripped.slice(0, len)
     const taken = await checkExists(code)
     if (!taken) return code
