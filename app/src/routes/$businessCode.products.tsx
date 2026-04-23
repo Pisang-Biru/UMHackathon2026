@@ -58,6 +58,7 @@ function ProductsPage() {
   }
 
   async function handleDeleteClick(product: Product) {
+    if (!window.confirm(`Delete "${product.name}"? This cannot be undone.`)) return
     await deleteProduct({ data: { id: product.id } })
     setProducts((prev) => prev.filter((p) => p.id !== product.id))
   }
