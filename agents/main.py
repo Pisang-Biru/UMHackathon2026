@@ -8,9 +8,9 @@ from app.agents.base import build_chat_agent
 from app.routers.agent import make_agent_router
 
 llm = ChatOpenAI(
-    model="glm-5.1",
+    model="ilmu-glm-5.1",
     openai_api_key=os.getenv("ZAI_API_KEY"),
-    openai_api_base="https://api.z.ai/api/paas/v4/",
+    openai_api_base="https://api.ilmu.ai/v1/",
     temperature=0.6,
 )
 
