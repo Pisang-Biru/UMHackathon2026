@@ -24,7 +24,24 @@ _MEMORY_TABLES = (
     "memory_kb_chunk",
     "memory_conversation_summary",
     "memory_conversation_turn",
+    "agent_action",
+    "product",
 )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def bootstrap_fk_rows(engine):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+            VALUES ('test-user', 'Test User', 'test@example.com', false, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+        """))
+        conn.execute(text("""
+            INSERT INTO business (id, name, code, "userId", "createdAt", "updatedAt")
+            VALUES ('biz1', 'Test Biz', 'TEST-BIZ-001', 'test-user', NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+        """))
 
 
 @pytest.fixture()
