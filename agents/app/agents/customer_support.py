@@ -18,6 +18,9 @@ from app.db import (
     Order,
     OrderStatus,
 )
+from app.memory import repo as memory_repo
+from app.memory.embedder import embed
+from app.memory.formatter import memory_block as format_memory_block
 
 
 class StructuredReply(BaseModel):
@@ -101,6 +104,8 @@ You are a helpful customer support agent for a seller.
 
 {context}
 
+{memory_block}
+
 Your job:
 - Answer buyer questions accurately using ONLY the info above
 - Be friendly and concise
@@ -124,6 +129,31 @@ Confidence guide:
 - 0.7-0.9: Reasonable inference from available info
 - <0.7   : Uncertain, info missing, or sensitive topic (complaints, refunds, shipping)
 """
+
+
+async def _load_memory_node(state: SupportAgentState) -> dict:
+    phone = state.get("customer_phone") or ""
+    business_id = state["business_id"]
+
+    if not phone:
+        return {"memory_block": format_memory_block(phone=None, recent_turns=[], summaries=[])}
+
+    latest = ""
+    if state["messages"]:
+        last = state["messages"][-1]
+        if isinstance(last.content, str):
+            latest = last.content
+
+    with SessionLocal() as session:
+        recent = memory_repo.recent_turns(session, business_id, phone,
+                                           limit=int(os.environ.get("MEMORY_RECENT_TURNS", "20")))
+        summaries = []
+        if latest:
+            q_vec = embed([latest])[0]
+            summaries = memory_repo.search_summaries(session, business_id, phone, q_vec, k=3, min_sim=0.5)
+
+    block = format_memory_block(phone=phone, recent_turns=recent, summaries=summaries)
+    return {"memory_block": block}
 
 
 def build_customer_support_agent(llm):
@@ -150,7 +180,10 @@ def build_customer_support_agent(llm):
     async def draft_reply(state: SupportAgentState) -> dict:
         tool_fn = _make_tool(state["business_id"])
         llm_with_tools = llm.bind_tools([tool_fn])
-        system_prompt = SYSTEM_TEMPLATE.format(context=state["business_context"])
+        system_prompt = SYSTEM_TEMPLATE.format(
+            context=state["business_context"],
+            memory_block=state.get("memory_block", ""),
+        )
 
         history: list[BaseMessage] = [SystemMessage(content=system_prompt)] + list(state["messages"])
 
@@ -236,8 +269,10 @@ def build_customer_support_agent(llm):
     graph.add_node("auto_send", auto_send)
     graph.add_node("queue_approval", queue_approval)
 
+    graph.add_node("load_memory", _load_memory_node)
     graph.add_edge(START, "load_context")
-    graph.add_edge("load_context", "draft_reply")
+    graph.add_edge("load_context", "load_memory")
+    graph.add_edge("load_memory", "draft_reply")
     graph.add_edge("draft_reply", "route_decision")
     graph.add_conditional_edges("route_decision", _route_edge, {
         "auto_send": "auto_send",
