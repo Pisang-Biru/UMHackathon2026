@@ -114,7 +114,7 @@ def _build_context(business_id: str) -> str:
     return "\n".join(lines)
 
 
-def _create_order(business_id: str, product_id: str, qty: int) -> str:
+def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: str | None = None) -> str:
     if qty <= 0:
         raise ValueError("qty must be positive")
     with SessionLocal() as session:
@@ -150,6 +150,7 @@ def _create_order(business_id: str, product_id: str, qty: int) -> str:
             unitPrice=unit_price,
             totalAmount=total,
             status=OrderStatus.PENDING_PAYMENT,
+            buyerContact=buyer_contact or None,
         )
         session.add(order)
         session.commit()
@@ -276,7 +277,7 @@ def build_customer_support_agent(llm):
         context = _build_context(state["business_id"])
         return {"business_context": context}
 
-    def _make_tool(business_id: str):
+    def _make_tool(business_id: str, customer_phone: str):
         @tool
         def create_payment_link(product_id: str, qty: int) -> str:
             """Create a payment link for a buyer who wants to purchase a product.
@@ -286,14 +287,14 @@ def build_customer_support_agent(llm):
             Returns a URL the buyer can open to pay, or an error message.
             """
             try:
-                order_id = _create_order(business_id, product_id, qty)
+                order_id = _create_order(business_id, product_id, qty, buyer_contact=customer_phone or None)
                 return f"{APP_URL}/pay/{order_id}"
             except Exception as e:
                 return f"ERROR: {e}"
         return create_payment_link
 
     async def draft_reply(state: SupportAgentState) -> dict:
-        payment_tool = _make_tool(state["business_id"])
+        payment_tool = _make_tool(state["business_id"], state.get("customer_phone") or "")
         memory_tool = _make_search_memory_tool(state["business_id"])
         llm_with_tools = llm.bind_tools([payment_tool, memory_tool])
         system_prompt = SYSTEM_TEMPLATE.format(
