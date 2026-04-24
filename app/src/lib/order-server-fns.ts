@@ -60,12 +60,6 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
       if (!order) throw new Error('Order not found')
       if (order.status !== 'PENDING_PAYMENT') throw new Error(`Order is ${order.status}`)
 
-      const dec = await tx.product.updateMany({
-        where: { id: order.productId, stock: { gte: order.qty } },
-        data: { stock: { decrement: order.qty } },
-      })
-      if (dec.count === 0) throw new Error('Out of stock')
-
       const updated = await tx.order.update({
         where: { id: data.orderId },
         data: {

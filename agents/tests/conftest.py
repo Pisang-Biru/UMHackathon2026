@@ -25,6 +25,7 @@ _MEMORY_TABLES = (
     "memory_conversation_summary",
     "memory_conversation_turn",
     "agent_action",
+    "order",
     "product",
 )
 

@@ -12,6 +12,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
+from sqlalchemy import update
 from app.db import (
     SessionLocal,
     Business,
@@ -114,6 +115,8 @@ def _build_context(business_id: str) -> str:
 
 
 def _create_order(business_id: str, product_id: str, qty: int) -> str:
+    if qty <= 0:
+        raise ValueError("qty must be positive")
     with SessionLocal() as session:
         product = session.query(Product).filter(
             Product.id == product_id,
@@ -121,12 +124,22 @@ def _create_order(business_id: str, product_id: str, qty: int) -> str:
         ).first()
         if not product:
             raise ValueError(f"Product {product_id} not found for this business")
-        if qty <= 0:
-            raise ValueError("qty must be positive")
-        if product.stock < qty:
-            raise ValueError(f"Only {product.stock} in stock")
-        order_id = generate_cuid()
         unit_price = Decimal(product.price)
+
+        rows = session.execute(
+            update(Product)
+            .where(
+                Product.id == product_id,
+                Product.businessId == business_id,
+                Product.stock >= qty,
+            )
+            .values(stock=Product.stock - qty)
+        ).rowcount
+        if rows == 0:
+            session.rollback()
+            raise ValueError(f"Insufficient stock for {product.name}")
+
+        order_id = generate_cuid()
         total = unit_price * Decimal(qty)
         order = Order(
             id=order_id,
@@ -140,6 +153,11 @@ def _create_order(business_id: str, product_id: str, qty: int) -> str:
         )
         session.add(order)
         session.commit()
+        try:
+            from app.worker.tasks import embed_product
+            embed_product.delay(product_id)
+        except Exception:
+            pass
         return order_id
 
 
