@@ -27,12 +27,7 @@ from app.memory.embedder import embed
 from app.memory.formatter import memory_block as format_memory_block
 from app.memory.formatter import format_search_results
 from typing import Literal as _Lit
-
-
-class StructuredReply(BaseModel):
-    reply: str = Field(description="The reply to the buyer. If a payment link was generated, include the URL verbatim.")
-    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in this reply")
-    reasoning: str = Field(description="One sentence explaining your confidence")
+from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
 
 
 class SupportAgentState(TypedDict):
@@ -183,20 +178,29 @@ Purchase flow:
 - Never invent a payment URL.
 
 Order status flow:
-- If the buyer asks about past purchases, existing orders, or whether a payment succeeded (e.g. "ada saya beli barang?", "did my payment go through?"), call check_order_status (no arguments — it knows the current buyer).
-- Report what the tool returns. Do not guess — if the tool says "no orders found for this phone", tell the buyer that directly. If the tool returns an ERROR, tell the buyer their phone is not on file and ask them to share it.
+- If the buyer asks about past purchases, existing orders, or whether a payment succeeded, call check_order_status (no arguments — it knows the current buyer).
+- Report what the tool returns. Do not guess.
 
-After any tool calls, you MUST respond with valid JSON only, no other text:
+After any tool calls, respond with valid JSON only, no other text:
 {{
   "reply": "<your reply to the buyer (include payment URL when a link was generated)>",
-  "confidence": <float between 0.0 and 1.0>,
-  "reasoning": "<one sentence explaining your confidence>"
+  "confidence": <float 0.0-1.0>,
+  "reasoning": "<one sentence explaining your confidence>",
+  "addressed_questions": ["<buyer question you answered>", ...],
+  "unaddressed_questions": ["<buyer question you did NOT answer, verbatim>", ...],
+  "facts_used": [{{"kind": "product|order|kb|memory", "id": "<id>"}}, ...],
+  "needs_human": <true only if refund / complaint / out-of-scope, else false>
 }}
 
-Confidence guide:
-- 0.9+   : Direct factual answer from product data above, tool-returned order status, or confirmed payment link
-- 0.7-0.9: Reasonable inference from available info
-- <0.7   : Uncertain, info missing, or sensitive topic (complaints, refunds, shipping)
+Rules for facts_used:
+- If you call create_payment_link, add {{"kind":"product","id":"<product_id>"}}.
+- If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference.
+- If you quote a product price or stock number, add that product's {{"kind":"product","id":"<id>"}}.
+
+Confidence guide (for telemetry only, not routing):
+- 0.9+   : Direct factual answer from product data or tool output
+- 0.7-0.9: Reasonable inference
+- <0.7   : Uncertain / info missing / sensitive topic
 """
 
 
