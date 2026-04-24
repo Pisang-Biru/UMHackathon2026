@@ -80,3 +80,38 @@ async def test_search_memory_tool_empty_result(session, engine, monkeypatch):
     tool = cs._make_search_memory_tool("biz_empty")
     out = tool.invoke({"query": "anything", "kind": "kb"})
     assert "No results" in out
+
+
+@pytest.mark.asyncio
+async def test_auto_send_enqueues_memory_write(monkeypatch):
+    enqueued = []
+    monkeypatch.setattr(cs, "_enqueue_turn_write", lambda **kw: enqueued.append(kw))
+
+    state = {
+        "messages": [SimpleNamespace(content="hi there")],
+        "business_id": "bizE",
+        "customer_phone": "+60999",
+        "draft_reply": "hello!",
+        "confidence": 0.95,
+        "reasoning": "",
+    }
+    cs._enqueue_from_state(state, action_id="actX")
+    assert len(enqueued) == 1
+    assert enqueued[0]["business_id"] == "bizE"
+    assert enqueued[0]["customer_phone"] == "+60999"
+    assert enqueued[0]["buyer_msg"] == "hi there"
+    assert enqueued[0]["agent_reply"] == "hello!"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_skipped_when_phone_missing(monkeypatch):
+    enqueued = []
+    monkeypatch.setattr(cs, "_enqueue_turn_write", lambda **kw: enqueued.append(kw))
+    state = {
+        "messages": [SimpleNamespace(content="hi")],
+        "business_id": "bizE",
+        "customer_phone": "",
+        "draft_reply": "hello!",
+    }
+    cs._enqueue_from_state(state, action_id="actX")
+    assert enqueued == []

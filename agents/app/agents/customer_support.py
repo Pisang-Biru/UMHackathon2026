@@ -1,4 +1,5 @@
 import os
+import logging
 from cuid2 import Cuid as _Cuid
 generate_cuid = _Cuid().generate
 from decimal import Decimal
@@ -46,6 +47,45 @@ class SupportAgentState(TypedDict):
 
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:3000")
+
+_log = logging.getLogger(__name__)
+
+
+def _enqueue_turn_write(*, business_id, customer_phone, buyer_msg, agent_reply, action_id):
+    """Wrapped so tests can monkeypatch without importing Celery."""
+    if os.environ.get("MEMORY_ENABLED", "true").lower() != "true":
+        return
+    try:
+        from app.worker.tasks import embed_and_store_turn, embed_past_action
+        embed_and_store_turn.delay(
+            business_id=business_id,
+            customer_phone=customer_phone,
+            buyer_msg=buyer_msg,
+            agent_reply=agent_reply,
+            action_id=action_id,
+        )
+        embed_past_action.delay(action_id)
+    except Exception as e:
+        _log.warning("memory enqueue failed: %s", e)
+
+
+def _enqueue_from_state(state, action_id: str):
+    phone = state.get("customer_phone") or ""
+    if not phone:
+        return
+    msg = ""
+    if state.get("messages"):
+        last = state["messages"][-1]
+        if isinstance(last.content, str):
+            msg = last.content
+    reply = state.get("draft_reply") or ""
+    _enqueue_turn_write(
+        business_id=state["business_id"],
+        customer_phone=phone,
+        buyer_msg=msg,
+        agent_reply=reply,
+        action_id=action_id,
+    )
 
 
 def _build_context(business_id: str) -> str:
@@ -272,6 +312,7 @@ def build_customer_support_agent(llm):
             )
             session.add(record)
             session.commit()
+        _enqueue_from_state(state, action_id=action_id)
         return {"action_id": action_id}
 
     async def queue_approval(state: SupportAgentState) -> dict:
@@ -289,6 +330,7 @@ def build_customer_support_agent(llm):
             )
             session.add(record)
             session.commit()
+        _enqueue_from_state(state, action_id=action_id)
         return {"action_id": action_id}
 
     graph = StateGraph(SupportAgentState)
