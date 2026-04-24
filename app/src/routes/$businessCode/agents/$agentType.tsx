@@ -3,6 +3,7 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { fetchBusinesses } from '#/lib/business-server-fns'
 import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget, KNOWN_AGENT_TYPES } from '#/lib/agent-server-fns'
 import { approveAction, editAction, rejectAction } from '#/lib/inbox-server-fns'
+import { fetchAgentSales } from '#/lib/order-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
 import { Sidebar } from '#/components/sidebar'
 import { AgentPageHeader } from '#/components/agents/agent-page-header'
@@ -10,6 +11,7 @@ import { AgentTabBar, type AgentTab } from '#/components/agents/agent-tab-bar'
 import { DashboardTab } from '#/components/agents/dashboard-tab'
 import { RunsTab } from '#/components/agents/runs-tab'
 import { BudgetTab } from '#/components/agents/budget-tab'
+import { SalesTab } from '#/components/agents/sales-tab'
 import type { InboxAction, AgentActionStatus } from '#/lib/inbox-logic'
 import { getAgentMeta } from '#/lib/agent-meta'
 
@@ -20,7 +22,7 @@ export const Route = createFileRoute('/$businessCode/agents/$agentType')({
     const tab = search.tab
     const actionId = search.actionId
     return {
-      tab: (tab === 'dashboard' || tab === 'runs' || tab === 'budget' ? tab : 'dashboard') as AgentTab,
+      tab: (tab === 'dashboard' || tab === 'runs' || tab === 'budget' || tab === 'sales' ? tab : 'dashboard') as AgentTab,
       actionId: typeof actionId === 'string' ? actionId : undefined,
     }
   },
@@ -67,6 +69,19 @@ function AgentPage() {
   const [budgetRange, setBudgetRange] = React.useState(30)
   const [budgetLoaded, setBudgetLoaded] = React.useState(false)
 
+  const [salesRows, setSalesRows] = React.useState<any[]>([])
+  const [salesTotals, setSalesTotals] = React.useState({ count: 0, revenue: 0 })
+  const [salesRange, setSalesRange] = React.useState(30)
+  const [salesFilter, setSalesFilter] = React.useState<'ALL' | 'PAID' | 'PENDING_PAYMENT' | 'CANCELLED'>('ALL')
+  const [salesLoaded, setSalesLoaded] = React.useState(false)
+
+  async function loadSales(days: number) {
+    const res = await fetchAgentSales({ data: { businessId: current.id, agentType, rangeDays: days } })
+    setSalesRows(res.rows.map((r: any) => ({ ...r, createdAt: new Date(r.createdAt) })))
+    setSalesTotals(res.totals)
+    setSalesLoaded(true)
+  }
+
   async function loadRuns(filter: FilterStatus, cursor: string | null = null) {
     const res = await fetchAgentRuns({
       data: {
@@ -92,6 +107,7 @@ function AgentPage() {
   React.useEffect(() => {
     if (search.tab === 'runs' && !runsLoaded) loadRuns(runsFilter)
     if (search.tab === 'budget' && !budgetLoaded) loadBudget(budgetRange)
+    if (search.tab === 'sales' && !salesLoaded) loadSales(salesRange)
   }, [search.tab])
 
   function setTab(tab: AgentTab) {
@@ -174,6 +190,16 @@ function AgentPage() {
             rangeDays={budgetRange}
             onRangeChange={(d) => { setBudgetRange(d); loadBudget(d) }}
             onSelectRun={selectRun}
+          />
+        )}
+        {search.tab === 'sales' && (
+          <SalesTab
+            totals={salesTotals}
+            rows={salesRows}
+            rangeDays={salesRange}
+            filter={salesFilter}
+            onRangeChange={(d) => { setSalesRange(d); loadSales(d) }}
+            onFilterChange={setSalesFilter}
           />
         )}
       </main>

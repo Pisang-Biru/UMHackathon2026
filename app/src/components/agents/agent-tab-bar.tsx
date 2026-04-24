@@ -1,4 +1,4 @@
-export type AgentTab = 'dashboard' | 'runs' | 'budget'
+export type AgentTab = 'dashboard' | 'runs' | 'budget' | 'sales'
 
 interface AgentTabBarProps {
   active: AgentTab
@@ -9,6 +9,7 @@ const TABS: { id: AgentTab; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'runs', label: 'Runs' },
   { id: 'budget', label: 'Budget' },
+  { id: 'sales', label: 'Sales' },
 ]
 
 export function AgentTabBar({ active, onChange }: AgentTabBarProps) {
