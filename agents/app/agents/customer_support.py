@@ -30,7 +30,7 @@ from typing import Literal as _Lit
 from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
 
 
-class SupportAgentState(TypedDict):
+class SupportAgentState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     business_context: str
     business_id: str
@@ -40,8 +40,10 @@ class SupportAgentState(TypedDict):
     draft_reply: str
     confidence: float
     reasoning: str
-    action: Literal["auto_send", "queue_approval"]
-    action_id: str
+    structured_reply: StructuredReply | None
+    revision_mode: Literal["draft", "redraft"]
+    previous_draft: StructuredReply | None
+    critique: ManagerCritique | None
 
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:3000")
@@ -472,67 +474,52 @@ def build_customer_support_agent(llm):
                 "reasoning": f"Structured output failed: {e}",
             }
 
-    async def route_decision(state: SupportAgentState) -> dict:
-        action = "auto_send" if state["confidence"] >= 0.8 else "queue_approval"
-        return {"action": action}
+    async def redraft_reply(state: SupportAgentState) -> dict:
+        prev = state.get("previous_draft")
+        critique = state.get("critique")
+        if prev is None or critique is None:
+            raise ValueError("redraft_reply requires previous_draft and critique in state")
 
-    def _route_edge(state: SupportAgentState) -> Literal["auto_send", "queue_approval"]:
-        return state["action"]
+        system_prompt = SYSTEM_TEMPLATE.format(
+            context=state.get("business_context", ""),
+            memory_block=state.get("memory_block", ""),
+        )
+        revision_instruction = SystemMessage(content=(
+            "You are revising your previous reply based on Manager feedback. "
+            "Produce a corrected reply that addresses ALL of the following:\n\n"
+            f"Previous reply:\n{prev.reply}\n\n"
+            f"Missing facts to add: {critique.missing_facts}\n"
+            f"Incorrect claims to remove/correct: {critique.incorrect_claims}\n"
+            f"Tone issues to fix: {critique.tone_issues}\n"
+            f"Questions still unanswered: {critique.unanswered_questions}\n"
+            f"Keep from the previous draft: {critique.keep_from_draft}\n\n"
+            "Respond with the same JSON schema as before. Emit JSON only."
+        ))
+        history = [SystemMessage(content=system_prompt), *state["messages"], revision_instruction]
+        response = await llm.with_structured_output(StructuredReply).ainvoke(history)
+        return {
+            "structured_reply": response,
+            "draft_reply": response.reply,
+            "confidence": response.confidence,
+            "reasoning": response.reasoning,
+        }
 
-    async def auto_send(state: SupportAgentState) -> dict:
-        customer_msg = state["messages"][-1].content if state["messages"] else ""
-        action_id = generate_cuid()
-        with SessionLocal() as session:
-            record = AgentAction(
-                id=action_id,
-                businessId=state["business_id"],
-                customerMsg=customer_msg,
-                draftReply=state["draft_reply"],
-                finalReply=state["draft_reply"],
-                confidence=state["confidence"],
-                reasoning=state["reasoning"],
-                status=AgentActionStatus.AUTO_SENT,
-            )
-            session.add(record)
-            session.commit()
-        _enqueue_from_state(state, action_id=action_id)
-        return {"action_id": action_id}
-
-    async def queue_approval(state: SupportAgentState) -> dict:
-        customer_msg = state["messages"][-1].content if state["messages"] else ""
-        action_id = generate_cuid()
-        with SessionLocal() as session:
-            record = AgentAction(
-                id=action_id,
-                businessId=state["business_id"],
-                customerMsg=customer_msg,
-                draftReply=state["draft_reply"],
-                confidence=state["confidence"],
-                reasoning=state["reasoning"],
-                status=AgentActionStatus.PENDING,
-            )
-            session.add(record)
-            session.commit()
-        _enqueue_from_state(state, action_id=action_id)
-        return {"action_id": action_id}
+    def _entry_route(state: SupportAgentState) -> Literal["load_context", "redraft_reply"]:
+        return "redraft_reply" if state.get("revision_mode") == "redraft" else "load_context"
 
     graph = StateGraph(SupportAgentState)
     graph.add_node("load_context", load_context)
-    graph.add_node("draft_reply", draft_reply)
-    graph.add_node("route_decision", route_decision)
-    graph.add_node("auto_send", auto_send)
-    graph.add_node("queue_approval", queue_approval)
-
     graph.add_node("load_memory", _load_memory_node)
-    graph.add_edge(START, "load_context")
+    graph.add_node("draft_reply", draft_reply)
+    graph.add_node("redraft_reply", redraft_reply)
+
+    graph.add_conditional_edges(START, _entry_route, {
+        "load_context": "load_context",
+        "redraft_reply": "redraft_reply",
+    })
     graph.add_edge("load_context", "load_memory")
     graph.add_edge("load_memory", "draft_reply")
-    graph.add_edge("draft_reply", "route_decision")
-    graph.add_conditional_edges("route_decision", _route_edge, {
-        "auto_send": "auto_send",
-        "queue_approval": "queue_approval",
-    })
-    graph.add_edge("auto_send", END)
-    graph.add_edge("queue_approval", END)
+    graph.add_edge("draft_reply", END)
+    graph.add_edge("redraft_reply", END)
 
     return graph.compile()

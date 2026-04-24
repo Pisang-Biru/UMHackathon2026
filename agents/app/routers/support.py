@@ -79,22 +79,36 @@ def make_support_router(support_graph):
                 "draft_reply": "",
                 "confidence": 0.0,
                 "reasoning": "",
-                "action": "queue_approval",
-                "action_id": "",
+                "revision_mode": "draft",
             })
-            if result["action"] == "auto_send":
-                return SupportChatResponse(
-                    status="sent",
-                    reply=result["draft_reply"],
-                    action_id=result["action_id"],
-                    confidence=result["confidence"],
+            # Manager-less fallback: auto-send if confidence >= 0.8, else queue.
+            # This preserves behavior until Task 14 swaps in the Manager graph.
+            from app.db import SessionLocal, AgentAction, AgentActionStatus
+            from cuid2 import Cuid as _Cuid
+            action_id = _Cuid().generate()
+            confidence = result.get("confidence", 0.0)
+            draft = result.get("draft_reply", "")
+            reasoning = result.get("reasoning", "")
+            customer_msg = req.message
+            should_auto = confidence >= 0.8
+            status = AgentActionStatus.AUTO_SENT if should_auto else AgentActionStatus.PENDING
+            with SessionLocal() as session:
+                record = AgentAction(
+                    id=action_id,
+                    businessId=req.business_id,
+                    customerMsg=customer_msg,
+                    draftReply=draft,
+                    finalReply=draft if should_auto else None,
+                    confidence=confidence,
+                    reasoning=reasoning,
+                    status=status,
                 )
-            else:
-                return SupportChatResponse(
-                    status="pending_approval",
-                    action_id=result["action_id"],
-                    confidence=result["confidence"],
-                )
+                session.add(record)
+                session.commit()
+            if should_auto:
+                _enqueue_past_action(action_id)
+                return SupportChatResponse(status="sent", reply=draft, action_id=action_id, confidence=confidence)
+            return SupportChatResponse(status="pending_approval", action_id=action_id, confidence=confidence)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
