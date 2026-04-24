@@ -174,6 +174,8 @@ Confidence guide:
 
 
 async def _load_memory_node(state: SupportAgentState) -> dict:
+    if os.environ.get("MEMORY_ENABLED", "true").lower() != "true":
+        return {"memory_block": ""}
     phone = state.get("customer_phone") or ""
     business_id = state["business_id"]
 

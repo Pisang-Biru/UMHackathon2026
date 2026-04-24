@@ -115,3 +115,15 @@ async def test_enqueue_skipped_when_phone_missing(monkeypatch):
     }
     cs._enqueue_from_state(state, action_id="actX")
     assert enqueued == []
+
+
+@pytest.mark.asyncio
+async def test_memory_disabled_skips_load(monkeypatch):
+    monkeypatch.setenv("MEMORY_ENABLED", "false")
+    state = {
+        "messages": [],
+        "business_id": "biz1",
+        "customer_phone": "+60111",
+    }
+    result = await cs._load_memory_node(state)
+    assert result["memory_block"] == ""
