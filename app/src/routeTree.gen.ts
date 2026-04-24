@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PayOrderIdRouteImport } from './routes/pay/$orderId'
 import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode/products'
 import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/inbox'
 import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
@@ -25,6 +26,11 @@ const LoginRoute = LoginRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayOrderIdRoute = PayOrderIdRouteImport.update({
+  id: '/pay/$orderId',
+  path: '/pay/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BusinessCodeProductsRoute = BusinessCodeProductsRouteImport.update({
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/$businessCode/dashboard'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
+    | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/$businessCode/dashboard'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
+    | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
   id:
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/$businessCode/dashboard'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
+    | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
@@ -118,6 +130,7 @@ export interface RootRouteChildren {
   BusinessCodeDashboardRoute: typeof BusinessCodeDashboardRoute
   BusinessCodeInboxRoute: typeof BusinessCodeInboxRoute
   BusinessCodeProductsRoute: typeof BusinessCodeProductsRoute
+  PayOrderIdRoute: typeof PayOrderIdRoute
   BusinessCodeAgentsAgentTypeRoute: typeof BusinessCodeAgentsAgentTypeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -136,6 +149,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pay/$orderId': {
+      id: '/pay/$orderId'
+      path: '/pay/$orderId'
+      fullPath: '/pay/$orderId'
+      preLoaderRoute: typeof PayOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$businessCode/products': {
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   BusinessCodeDashboardRoute: BusinessCodeDashboardRoute,
   BusinessCodeInboxRoute: BusinessCodeInboxRoute,
   BusinessCodeProductsRoute: BusinessCodeProductsRoute,
+  PayOrderIdRoute: PayOrderIdRoute,
   BusinessCodeAgentsAgentTypeRoute: BusinessCodeAgentsAgentTypeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
