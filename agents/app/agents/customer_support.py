@@ -319,7 +319,7 @@ def _try_parse_json_reply(text: str):
     if not match:
         return None
     try:
-        data = json.loads(match.group(0))
+        data = json.loads(match.group(0), strict=False)
         return StructuredReply.model_validate(data)
     except Exception:
         return None
@@ -388,18 +388,23 @@ def build_customer_support_agent(llm):
                 "reasoning": direct.reasoning,
             }
 
-        structured_llm = llm.with_structured_output(StructuredReply)
         final_instruction = SystemMessage(content=(
-            "Now produce the final reply to the buyer as JSON matching the schema. "
-            "If a payment link was created above, include the URL verbatim in the reply field."
+            "Produce the final reply to the buyer as a single JSON object matching this schema:\n"
+            '{"reply": "<text, include payment URL verbatim when a link was generated>", '
+            '"confidence": <float 0.0-1.0>, "reasoning": "<one sentence>"}\n'
+            "Output ONLY the JSON object. No markdown fences, no prose before or after."
         ))
         try:
-            parsed: StructuredReply = await structured_llm.ainvoke(history + [final_instruction])
-            return {
-                "draft_reply": parsed.reply,
-                "confidence": float(parsed.confidence),
-                "reasoning": parsed.reasoning,
-            }
+            response = await llm.ainvoke(history + [final_instruction])
+            retry_text = response.content if isinstance(response.content, str) else ""
+            retry_parsed = _try_parse_json_reply(retry_text)
+            if retry_parsed is not None:
+                return {
+                    "draft_reply": retry_parsed.reply,
+                    "confidence": float(retry_parsed.confidence),
+                    "reasoning": retry_parsed.reasoning,
+                }
+            raise ValueError(f"could not parse JSON from retry: {retry_text[:200]}")
         except Exception as e:
             return {
                 "draft_reply": last_text,
