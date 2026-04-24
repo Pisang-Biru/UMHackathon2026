@@ -73,3 +73,29 @@ def test_approve_enqueues_past_action(monkeypatch):
     r = client.post(f"/agent/actions/{aid}/approve")
     assert r.status_code == 200
     assert aid in calls
+
+
+def test_reindex_product_endpoint_enqueues(monkeypatch):
+    from app.routers import memory as mem_router
+    calls = []
+    monkeypatch.setattr(mem_router, "_enqueue_product", lambda pid: calls.append(pid))
+    client = TestClient(app)
+    r = client.post("/memory/product/abc123/reindex")
+    assert r.status_code == 202
+    assert calls == ["abc123"]
+
+
+def test_kb_ingest_chunks_and_enqueues(monkeypatch):
+    from app.routers import memory as mem_router
+    calls = []
+    monkeypatch.setattr(mem_router, "_enqueue_kb_chunk",
+                         lambda **kw: calls.append(kw))
+    client = TestClient(app)
+    r = client.post("/memory/kb", json={
+        "business_id": "biz1",
+        "source_id": "docX",
+        "text": "Hello world. " * 300,
+    })
+    assert r.status_code == 202
+    assert len(calls) >= 1
+    assert all(c["business_id"] == "biz1" and c["source_id"] == "docX" for c in calls)

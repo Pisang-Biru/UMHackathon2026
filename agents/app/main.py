@@ -8,6 +8,7 @@ from app.agents.base import build_chat_agent
 from app.agents.customer_support import build_customer_support_agent
 from app.routers.agent import make_agent_router
 from app.routers.support import make_support_router
+from app.routers.memory import router as memory_router
 
 llm = ChatOpenAI(
     model=os.getenv("MODEL"),
@@ -22,6 +23,7 @@ support_graph = build_customer_support_agent(llm)
 app = FastAPI(title="LangGraph Agents API", version="0.1.0")
 app.include_router(make_agent_router(chat_graph))
 app.include_router(make_support_router(support_graph))
+app.include_router(memory_router)
 
 
 @app.get("/health")
