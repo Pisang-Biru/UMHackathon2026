@@ -1,12 +1,23 @@
 import json
+import os
 from cuid2 import Cuid as _Cuid
 generate_cuid = _Cuid().generate
+from decimal import Decimal
 from typing import Annotated, Literal
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langchain_core.messages import BaseMessage, SystemMessage
-from app.db import SessionLocal, Business, Product, AgentAction, AgentActionStatus
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
+from app.db import (
+    SessionLocal,
+    Business,
+    Product,
+    AgentAction,
+    AgentActionStatus,
+    Order,
+    OrderStatus,
+)
 
 
 class SupportAgentState(TypedDict):
@@ -21,6 +32,9 @@ class SupportAgentState(TypedDict):
     action_id: str
 
 
+APP_URL = os.environ.get("APP_URL", "http://localhost:3000")
+
+
 def _build_context(business_id: str) -> str:
     with SessionLocal() as session:
         business = session.query(Business).filter(Business.id == business_id).first()
@@ -33,15 +47,45 @@ def _build_context(business_id: str) -> str:
         lines.append(f"About: {business.mission}")
 
     if products:
-        lines.append("\nProducts available:")
+        lines.append("\nProducts available (use product id when creating payment links):")
         for p in products:
             stock_note = f"{p.stock} in stock" if p.stock > 0 else "OUT OF STOCK"
             desc = f" — {p.description}" if p.description else ""
-            lines.append(f"- {p.name}: RM{p.price:.2f}, {stock_note}{desc}")
+            lines.append(f"- [{p.id}] {p.name}: RM{p.price:.2f}, {stock_note}{desc}")
     else:
         lines.append("\nNo products listed yet.")
 
     return "\n".join(lines)
+
+
+def _create_order(business_id: str, product_id: str, qty: int) -> str:
+    with SessionLocal() as session:
+        product = session.query(Product).filter(
+            Product.id == product_id,
+            Product.businessId == business_id,
+        ).first()
+        if not product:
+            raise ValueError(f"Product {product_id} not found for this business")
+        if qty <= 0:
+            raise ValueError("qty must be positive")
+        if product.stock < qty:
+            raise ValueError(f"Only {product.stock} in stock")
+        order_id = generate_cuid()
+        unit_price = Decimal(product.price)
+        total = unit_price * Decimal(qty)
+        order = Order(
+            id=order_id,
+            businessId=business_id,
+            productId=product_id,
+            agentType="support",
+            qty=qty,
+            unitPrice=unit_price,
+            totalAmount=total,
+            status=OrderStatus.PENDING_PAYMENT,
+        )
+        session.add(order)
+        session.commit()
+        return order_id
 
 
 SYSTEM_TEMPLATE = """\
@@ -55,15 +99,20 @@ Your job:
 - Reply in the same language the buyer uses (Malay or English)
 - If you are unsure about anything, say so honestly — never fabricate stock or prices
 
-You MUST respond with valid JSON only, no other text:
+Purchase flow:
+- If the buyer clearly wants to purchase a specific product and quantity, call the create_payment_link tool with the product id and quantity.
+- After the tool returns a URL, include that URL verbatim in your reply.
+- Never invent a payment URL.
+
+After any tool calls, you MUST respond with valid JSON only, no other text:
 {{
-  "reply": "<your reply to the buyer>",
+  "reply": "<your reply to the buyer (include payment URL when a link was generated)>",
   "confidence": <float between 0.0 and 1.0>,
   "reasoning": "<one sentence explaining your confidence>"
 }}
 
 Confidence guide:
-- 0.9+   : Direct factual answer from product data above
+- 0.9+   : Direct factual answer from product data above, or confirmed payment link
 - 0.7-0.9: Reasonable inference from available info
 - <0.7   : Uncertain, info missing, or sensitive topic (complaints, refunds, shipping)
 """
@@ -74,12 +123,41 @@ def build_customer_support_agent(llm):
         context = _build_context(state["business_id"])
         return {"business_context": context}
 
-    async def draft_reply(state: SupportAgentState) -> dict:
-        system_prompt = SYSTEM_TEMPLATE.format(context=state["business_context"])
-        messages = [SystemMessage(content=system_prompt)] + list(state["messages"])
-        response = await llm.ainvoke(messages)
+    def _make_tool(business_id: str):
+        @tool
+        def create_payment_link(product_id: str, qty: int) -> str:
+            """Create a payment link for a buyer who wants to purchase a product.
+            Args:
+                product_id: the product id from the product list
+                qty: quantity the buyer wants (positive integer)
+            Returns a URL the buyer can open to pay, or an error message.
+            """
+            try:
+                order_id = _create_order(business_id, product_id, qty)
+                return f"{APP_URL}/pay/{order_id}"
+            except Exception as e:
+                return f"ERROR: {e}"
+        return create_payment_link
 
-        content = response.content.strip()
+    async def draft_reply(state: SupportAgentState) -> dict:
+        tool_fn = _make_tool(state["business_id"])
+        llm_with_tools = llm.bind_tools([tool_fn])
+        system_prompt = SYSTEM_TEMPLATE.format(context=state["business_context"])
+
+        history: list[BaseMessage] = [SystemMessage(content=system_prompt)] + list(state["messages"])
+
+        for _ in range(3):
+            response = await llm_with_tools.ainvoke(history)
+            history.append(response)
+            tool_calls = getattr(response, "tool_calls", None) or []
+            if not tool_calls:
+                break
+            for call in tool_calls:
+                result = tool_fn.invoke(call["args"])
+                history.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
+
+        final = history[-1]
+        content = final.content.strip() if isinstance(final.content, str) else ""
         if content.startswith("```"):
             content = content.split("```")[1]
             if content.startswith("json"):
