@@ -56,6 +56,7 @@ When the stack is ready:
 ./scripts/dev.sh psql         # psql into the DB
 ./scripts/dev.sh shell        # bash into agents-api
 ./scripts/dev.sh seed         # re-run seed (idempotent)
+./scripts/dev.sh env          # reload services after editing agents/.env
 ./scripts/dev.sh reset        # nuke volumes + rebuild from scratch
 ```
 
