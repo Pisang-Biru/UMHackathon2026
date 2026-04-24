@@ -83,7 +83,7 @@ async def test_search_memory_tool_empty_result(session, engine, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_auto_send_enqueues_memory_write(monkeypatch):
+async def test_draft_reply_enqueues_memory_write(monkeypatch):
     enqueued = []
     monkeypatch.setattr(cs, "_enqueue_turn_write", lambda **kw: enqueued.append(kw))
 

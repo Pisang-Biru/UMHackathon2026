@@ -11,10 +11,10 @@ def test_support_chat_accepts_customer_phone(monkeypatch):
     async def fake_ainvoke(state):
         captured.update(state)
         return {
-            "action": "auto_send",
             "draft_reply": "hi back",
-            "action_id": "act1",
             "confidence": 0.9,
+            "reasoning": "clear",
+            "structured_reply": None,
         }
 
     monkeypatch.setattr(support_router, "_support_graph_ainvoke", fake_ainvoke)
@@ -36,7 +36,7 @@ def test_support_chat_without_phone_defaults_empty(monkeypatch):
 
     async def fake_ainvoke(state):
         captured.update(state)
-        return {"action": "auto_send", "draft_reply": "ok", "action_id": "a", "confidence": 0.9}
+        return {"draft_reply": "ok", "confidence": 0.9, "reasoning": "clear", "structured_reply": None}
 
     monkeypatch.setattr(support_router, "_support_graph_ainvoke", fake_ainvoke)
 

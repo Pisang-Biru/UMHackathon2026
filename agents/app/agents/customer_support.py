@@ -425,7 +425,7 @@ def build_customer_support_agent(llm):
 
         _log.warning("JSON parse failed twice; synthesizing needs_human draft")
         fallback = StructuredReply(
-            reply="Sorry, I need someone to look at this properly. A human will reply shortly.",
+            reply="Maaf, saya perlu orang semak ni dulu. Sorry, a human will reply shortly.",
             confidence=0.0,
             reasoning="JSON parsing failed twice",
             needs_human=True,
@@ -438,6 +438,12 @@ def build_customer_support_agent(llm):
         }
 
     async def redraft_reply(state: SupportAgentState) -> dict:
+        """Revise a prior draft using Manager critique.
+
+        Callers MUST pre-populate ``business_context`` and ``memory_block`` in state —
+        this node skips ``load_context`` and ``load_memory`` by design (the Manager is
+        responsible for carrying those values forward from the original draft turn).
+        """
         prev = state.get("previous_draft")
         critique = state.get("critique")
         if prev is None or critique is None:

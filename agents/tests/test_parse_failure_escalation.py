@@ -31,4 +31,5 @@ async def test_parse_failure_produces_needs_human_draft(monkeypatch):
     result = await graph.ainvoke(state)
     sr = result["structured_reply"]
     assert sr.needs_human is True
-    assert "JSON parsing failed" in sr.reasoning.lower() or "human" in sr.reply.lower()
+    assert "human" in sr.reply.lower()
+    assert "JSON parsing failed" in sr.reasoning
