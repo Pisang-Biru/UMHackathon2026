@@ -49,3 +49,34 @@ async def test_load_memory_fetches_recent_turns(session, engine, monkeypatch):
     }
     result = await cs._load_memory_node(state)
     assert "earlier q" in result["memory_block"]
+
+
+@pytest.mark.asyncio
+async def test_search_memory_tool_returns_kb_hits(session, engine, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    from app.memory import repo
+    TestSession = sessionmaker(bind=engine)
+    v = [1.0] + [0.0] * 1023
+    with TestSession() as s:
+        repo.insert_kb_chunk(s, "bizT", "src", 0, "We ship KL same day", v)
+        s.commit()
+
+    monkeypatch.setattr(cs, "SessionLocal", TestSession)
+    monkeypatch.setattr(cs, "embed", lambda texts: [v for _ in texts])
+
+    tool = cs._make_search_memory_tool("bizT")
+    out = tool.invoke({"query": "shipping KL", "kind": "kb"})
+    assert "ship KL" in out
+    assert "kind=kb" in out
+
+
+@pytest.mark.asyncio
+async def test_search_memory_tool_empty_result(session, engine, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    TestSession = sessionmaker(bind=engine)
+    monkeypatch.setattr(cs, "SessionLocal", TestSession)
+    monkeypatch.setattr(cs, "embed", lambda texts: [[0.0] * 1024 for _ in texts])
+
+    tool = cs._make_search_memory_tool("biz_empty")
+    out = tool.invoke({"query": "anything", "kind": "kb"})
+    assert "No results" in out

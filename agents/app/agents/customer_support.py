@@ -21,6 +21,8 @@ from app.db import (
 from app.memory import repo as memory_repo
 from app.memory.embedder import embed
 from app.memory.formatter import memory_block as format_memory_block
+from app.memory.formatter import format_search_results
+from typing import Literal as _Lit
 
 
 class StructuredReply(BaseModel):
@@ -156,6 +158,27 @@ async def _load_memory_node(state: SupportAgentState) -> dict:
     return {"memory_block": block}
 
 
+def _make_search_memory_tool(business_id: str):
+    @tool
+    def search_memory(query: str, kind: _Lit["kb", "product", "past_action"]) -> str:
+        """Search business memory for context outside of the live conversation.
+        Args:
+            query: what to search for (buyer's phrasing or a paraphrase)
+            kind: "kb" (FAQ/policy docs), "product" (fuzzy product match), or "past_action" (similar past buyer messages)
+        Returns a numbered list of top matches with similarity scores, or "No results".
+        """
+        q_vec = embed([query])[0]
+        with SessionLocal() as session:
+            if kind == "kb":
+                hits = memory_repo.search_kb(session, business_id, q_vec, k=5, min_sim=0.6)
+            elif kind == "product":
+                hits = memory_repo.search_products(session, business_id, q_vec, k=5, min_sim=0.5)
+            else:
+                hits = memory_repo.search_past_actions(session, business_id, q_vec, k=3, min_sim=0.7)
+        return format_search_results(kind, hits)
+    return search_memory
+
+
 def build_customer_support_agent(llm):
     async def load_context(state: SupportAgentState) -> dict:
         context = _build_context(state["business_id"])
@@ -178,8 +201,9 @@ def build_customer_support_agent(llm):
         return create_payment_link
 
     async def draft_reply(state: SupportAgentState) -> dict:
-        tool_fn = _make_tool(state["business_id"])
-        llm_with_tools = llm.bind_tools([tool_fn])
+        payment_tool = _make_tool(state["business_id"])
+        memory_tool = _make_search_memory_tool(state["business_id"])
+        llm_with_tools = llm.bind_tools([payment_tool, memory_tool])
         system_prompt = SYSTEM_TEMPLATE.format(
             context=state["business_context"],
             memory_block=state.get("memory_block", ""),
@@ -193,8 +217,13 @@ def build_customer_support_agent(llm):
             tool_calls = getattr(response, "tool_calls", None) or []
             if not tool_calls:
                 break
+            tool_by_name = {payment_tool.name: payment_tool, memory_tool.name: memory_tool}
             for call in tool_calls:
-                result = tool_fn.invoke(call["args"])
+                chosen = tool_by_name.get(call["name"])
+                if chosen is None:
+                    history.append(ToolMessage(content=f"ERROR: unknown tool {call['name']}", tool_call_id=call["id"]))
+                    continue
+                result = chosen.invoke(call["args"])
                 history.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
 
         structured_llm = llm.with_structured_output(StructuredReply)
