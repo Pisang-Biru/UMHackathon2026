@@ -182,3 +182,27 @@ llm = ChatOpenAI(model="gpt-4o-mini")
 ```
 
 The agent code doesn't change — only `main.py`.
+
+## Memory setup (pgvector + RabbitMQ)
+
+### Prerequisites
+
+RabbitMQ broker (for Celery):
+
+```bash
+docker run -d --name pisang-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+```
+
+Management UI at http://localhost:15672 (guest/guest).
+
+Enable pgvector extension on the Postgres database (one-time, requires superuser):
+
+```bash
+psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+Verify:
+
+```bash
+psql "$DATABASE_URL" -c "\dx vector"
+```
