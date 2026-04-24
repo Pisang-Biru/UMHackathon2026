@@ -221,6 +221,56 @@ async def _load_memory_node(state: SupportAgentState) -> dict:
     return {"memory_block": block}
 
 
+def _make_order_lookup_tool(business_id: str):
+    @tool
+    def check_order_status(phone: str) -> str:
+        """Look up this buyer's recent orders and their payment status.
+
+        Call this whenever the buyer asks about past purchases, current orders,
+        or whether a payment succeeded. Never guess — always call this tool.
+
+        Args:
+            phone: the buyer's phone number (from conversation context)
+        Returns up to 5 orders, newest first, or "no orders found for this phone".
+        """
+        if not phone:
+            return "ERROR: phone required"
+        try:
+            with SessionLocal() as session:
+                rows = (
+                    session.query(Order, Product.name)
+                    .outerjoin(Product, Product.id == Order.productId)
+                    .filter(
+                        Order.businessId == business_id,
+                        Order.buyerContact == phone,
+                    )
+                    .order_by(Order.createdAt.desc())
+                    .limit(5)
+                    .all()
+                )
+            if not rows:
+                return "no orders found for this phone"
+            lines = []
+            for order, product_name in rows:
+                short_id = order.id[:10]
+                created = order.createdAt.date().isoformat() if order.createdAt else "?"
+                parts = [
+                    f"#{short_id}",
+                    f"{order.qty}x {product_name or order.productId}",
+                    order.status.value,
+                    f"created {created}",
+                ]
+                if order.status == OrderStatus.PAID and order.paidAt:
+                    parts.append(f"paid {order.paidAt.date().isoformat()}")
+                if order.status == OrderStatus.PENDING_PAYMENT:
+                    parts.append(f"pay: {APP_URL}/pay/{order.id}")
+                lines.append(" • ".join(parts))
+            return "\n".join(lines)
+        except Exception as e:
+            return f"ERROR: {e}"
+    return check_order_status
+
+
 def _make_search_memory_tool(business_id: str):
     @tool
     def search_memory(query: str, kind: _Lit["kb", "product", "past_action"]) -> str:
@@ -296,7 +346,8 @@ def build_customer_support_agent(llm):
     async def draft_reply(state: SupportAgentState) -> dict:
         payment_tool = _make_tool(state["business_id"], state.get("customer_phone") or "")
         memory_tool = _make_search_memory_tool(state["business_id"])
-        llm_with_tools = llm.bind_tools([payment_tool, memory_tool])
+        order_tool = _make_order_lookup_tool(state["business_id"])
+        llm_with_tools = llm.bind_tools([payment_tool, memory_tool, order_tool])
         system_prompt = SYSTEM_TEMPLATE.format(
             context=state["business_context"],
             memory_block=state.get("memory_block", ""),
@@ -310,7 +361,11 @@ def build_customer_support_agent(llm):
             tool_calls = getattr(response, "tool_calls", None) or []
             if not tool_calls:
                 break
-            tool_by_name = {payment_tool.name: payment_tool, memory_tool.name: memory_tool}
+            tool_by_name = {
+                payment_tool.name: payment_tool,
+                memory_tool.name: memory_tool,
+                order_tool.name: order_tool,
+            }
             for call in tool_calls:
                 chosen = tool_by_name.get(call["name"])
                 if chosen is None:
