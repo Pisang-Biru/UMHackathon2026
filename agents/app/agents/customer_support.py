@@ -1,4 +1,6 @@
 import os
+import json
+import re
 import logging
 from cuid2 import Cuid as _Cuid
 generate_cuid = _Cuid().generate
@@ -221,6 +223,36 @@ def _make_search_memory_tool(business_id: str):
     return search_memory
 
 
+_JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _try_parse_json_reply(text: str):
+    """Attempt to extract a StructuredReply from the model's text output.
+
+    Some providers (e.g. Kimi via OpenRouter) emit tool calls as XML markup
+    instead of OpenAI-compatible JSON, which breaks `with_structured_output`.
+    But the prompt already instructs the model to emit a JSON object, and
+    most models comply in the text content. Try that path first.
+
+    Returns a StructuredReply on success, None on failure.
+    """
+    if not text or not text.strip():
+        return None
+    s = text.strip()
+    # strip ```json ... ``` fences if present
+    s = _JSON_FENCE_RE.sub("", s).strip()
+    # grab first {...} block (handles stray prose around JSON)
+    match = _JSON_OBJECT_RE.search(s)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+        return StructuredReply.model_validate(data)
+    except Exception:
+        return None
+
+
 def build_customer_support_agent(llm):
     async def load_context(state: SupportAgentState) -> dict:
         context = _build_context(state["business_id"])
@@ -268,6 +300,17 @@ def build_customer_support_agent(llm):
                 result = chosen.invoke(call["args"])
                 history.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
 
+        last = history[-1]
+        last_text = last.content if isinstance(last.content, str) else ""
+
+        direct = _try_parse_json_reply(last_text)
+        if direct is not None:
+            return {
+                "draft_reply": direct.reply,
+                "confidence": float(direct.confidence),
+                "reasoning": direct.reasoning,
+            }
+
         structured_llm = llm.with_structured_output(StructuredReply)
         final_instruction = SystemMessage(content=(
             "Now produce the final reply to the buyer as JSON matching the schema. "
@@ -281,12 +324,8 @@ def build_customer_support_agent(llm):
                 "reasoning": parsed.reasoning,
             }
         except Exception as e:
-            fallback_text = ""
-            last = history[-1]
-            if isinstance(last.content, str):
-                fallback_text = last.content
             return {
-                "draft_reply": fallback_text,
+                "draft_reply": last_text,
                 "confidence": 0.5,
                 "reasoning": f"Structured output failed: {e}",
             }
