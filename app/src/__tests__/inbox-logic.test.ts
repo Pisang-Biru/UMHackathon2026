@@ -23,6 +23,8 @@ function mk(overrides: Partial<InboxAction> = {}): InboxAction {
     agentType: 'support',
     createdAt: new Date(),
     updatedAt: new Date(),
+    bestDraft: null,
+    escalationSummary: null,
     ...overrides,
   }
 }
