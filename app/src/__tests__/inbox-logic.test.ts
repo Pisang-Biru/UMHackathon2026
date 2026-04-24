@@ -3,6 +3,7 @@ import {
   groupByAgent,
   matchesTab,
   matchesItemTab,
+  pickDisplayDraft,
   type InboxAction,
   type InboxOrder,
   type InboxItem,
@@ -135,5 +136,20 @@ describe('matchesItemTab — order kind', () => {
     expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PAID', acknowledgedAt: null }) }, 'unread', now)).toBe(true)
     expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PAID', acknowledgedAt: new Date() }) }, 'unread', now)).toBe(false)
     expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PENDING_PAYMENT', acknowledgedAt: null }) }, 'unread', now)).toBe(false)
+  })
+})
+
+describe('pickDisplayDraft', () => {
+  it('prefers bestDraft when present', () => {
+    const a = { bestDraft: 'rewrite', draftReply: 'v1' } as any
+    expect(pickDisplayDraft(a)).toBe('rewrite')
+  })
+  it('falls back to draftReply when bestDraft is null', () => {
+    const a = { bestDraft: null, draftReply: 'v1' } as any
+    expect(pickDisplayDraft(a)).toBe('v1')
+  })
+  it('falls back to draftReply when bestDraft is undefined', () => {
+    const a = { draftReply: 'v1' } as any
+    expect(pickDisplayDraft(a)).toBe('v1')
   })
 })
