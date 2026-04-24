@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { groupByAgent, matchesTab, type InboxAction } from '#/lib/inbox-logic'
+import {
+  groupByAgent,
+  matchesTab,
+  matchesItemTab,
+  type InboxAction,
+  type InboxOrder,
+  type InboxItem,
+} from '#/lib/inbox-logic'
 
 function mk(overrides: Partial<InboxAction> = {}): InboxAction {
   return {
@@ -70,5 +77,63 @@ describe('matchesTab', () => {
     expect(matchesTab(mk({ viewedAt: null, status: 'PENDING' }), 'unread', now)).toBe(true)
     expect(matchesTab(mk({ viewedAt: null, status: 'AUTO_SENT' }), 'unread', now)).toBe(false)
     expect(matchesTab(mk({ viewedAt: new Date(), status: 'PENDING' }), 'unread', now)).toBe(false)
+  })
+})
+
+function mkOrder(overrides: Partial<InboxOrder> = {}): InboxOrder {
+  return {
+    id: 'o1',
+    businessId: 'b1',
+    productName: 'Pisang',
+    qty: 2,
+    totalAmount: 4,
+    buyerName: 'Ali',
+    buyerContact: '012',
+    status: 'PAID',
+    paidAt: new Date('2026-04-23T10:00:00Z'),
+    acknowledgedAt: null,
+    createdAt: new Date('2026-04-23T10:00:00Z'),
+    ...overrides,
+  }
+}
+
+describe('matchesItemTab — action kind', () => {
+  const now = new Date('2026-04-24T12:00:00Z')
+
+  it('delegates to matchesTab for action kind', () => {
+    const pending: InboxItem = { kind: 'action', action: mk({ status: 'PENDING' }) }
+    expect(matchesItemTab(pending, 'mine', now)).toBe(true)
+    const autoSent: InboxItem = { kind: 'action', action: mk({ status: 'AUTO_SENT' }) }
+    expect(matchesItemTab(autoSent, 'mine', now)).toBe(false)
+  })
+})
+
+describe('matchesItemTab — order kind', () => {
+  const now = new Date('2026-04-24T12:00:00Z')
+
+  it('mine: PAID and not acknowledged', () => {
+    const paid: InboxItem = { kind: 'order', order: mkOrder({ status: 'PAID', acknowledgedAt: null }) }
+    expect(matchesItemTab(paid, 'mine', now)).toBe(true)
+
+    const acked: InboxItem = { kind: 'order', order: mkOrder({ status: 'PAID', acknowledgedAt: new Date() }) }
+    expect(matchesItemTab(acked, 'mine', now)).toBe(false)
+
+    const pending: InboxItem = { kind: 'order', order: mkOrder({ status: 'PENDING_PAYMENT' }) }
+    expect(matchesItemTab(pending, 'mine', now)).toBe(false)
+  })
+
+  it('recent: PAID/CANCELLED within 7 days', () => {
+    const recent = new Date('2026-04-22T12:00:00Z')
+    const old = new Date('2026-04-10T12:00:00Z')
+    expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PAID', createdAt: recent }) }, 'recent', now)).toBe(true)
+    expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'CANCELLED', createdAt: recent }) }, 'recent', now)).toBe(true)
+    expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PENDING_PAYMENT', createdAt: recent }) }, 'recent', now)).toBe(false)
+    expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PAID', createdAt: old }) }, 'recent', now)).toBe(false)
+  })
+
+  it('unread: PAID and acknowledgedAt null', () => {
+    expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PAID', acknowledgedAt: null }) }, 'unread', now)).toBe(true)
+    expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PAID', acknowledgedAt: new Date() }) }, 'unread', now)).toBe(false)
+    expect(matchesItemTab({ kind: 'order', order: mkOrder({ status: 'PENDING_PAYMENT', acknowledgedAt: null }) }, 'unread', now)).toBe(false)
   })
 })

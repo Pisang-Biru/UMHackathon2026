@@ -92,7 +92,10 @@ export const fetchAgentRuns = createServerFn({ method: 'GET' })
     if (status !== undefined && status !== 'PENDING' && status !== 'APPROVED' && status !== 'REJECTED' && status !== 'AUTO_SENT') {
       throw new Error('Invalid status filter')
     }
-    const limit = typeof raw.limit === 'number' ? Math.min(raw.limit, 100) : 50
+    const limit =
+      typeof raw.limit === 'number'
+        ? Math.min(Math.max(Math.floor(raw.limit), 1), 100)
+        : 50
     const cursor = typeof raw.cursor === 'string' ? raw.cursor : undefined
     return { businessId, agentType, status: status as undefined | 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO_SENT', limit, cursor }
   })

@@ -182,3 +182,56 @@ llm = ChatOpenAI(model="gpt-4o-mini")
 ```
 
 The agent code doesn't change — only `main.py`.
+
+## Memory setup (pgvector + RabbitMQ)
+
+### Prerequisites
+
+RabbitMQ broker (for Celery):
+
+```bash
+docker run -d --name pisang-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+```
+
+Management UI at http://localhost:15672 (guest/guest).
+
+Enable pgvector extension on the Postgres database (one-time, requires superuser):
+
+```bash
+psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+Verify:
+
+```bash
+psql "$DATABASE_URL" -c "\dx vector"
+```
+
+## Running with memory enabled
+
+Prereqs:
+- Postgres running, `pgvector` extension enabled
+- `DATABASE_URL` exported
+- RabbitMQ running on `localhost:5672` (see earlier memory-setup section)
+- `alembic upgrade head` run once
+- `python scripts/preload_embedder.py` run once (downloads bge-m3)
+
+Three processes:
+
+```bash
+# Terminal 1 — API
+uvicorn main:app --reload
+
+# Terminal 2 — Celery worker
+celery -A app.worker.celery_app worker --loglevel=info --concurrency=2 -Q memory
+
+# Terminal 3 — Celery beat (periodic summarizer)
+celery -A app.worker.celery_app beat --loglevel=info
+```
+
+Smoke test:
+
+```bash
+python scripts/smoke_memory.py
+```
+

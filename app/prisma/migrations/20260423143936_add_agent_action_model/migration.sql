@@ -7,12 +7,6 @@
 -- CreateEnum
 CREATE TYPE "AgentActionStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'AUTO_SENT');
 
--- DropForeignKey
-ALTER TABLE "product" DROP CONSTRAINT "product_businessId_fkey";
-
--- DropIndex
-DROP INDEX "product_businessId_idx";
-
 -- AlterTable
 ALTER TABLE "business" ADD COLUMN     "userId" TEXT NOT NULL;
 
@@ -34,9 +28,6 @@ CREATE TABLE "agent_action" (
 
 -- AddForeignKey
 ALTER TABLE "business" ADD CONSTRAINT "business_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "product" ADD CONSTRAINT "product_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "business"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_action" ADD CONSTRAINT "agent_action_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "business"("id") ON DELETE CASCADE ON UPDATE CASCADE;

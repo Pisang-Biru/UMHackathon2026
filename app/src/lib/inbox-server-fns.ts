@@ -48,25 +48,52 @@ export const fetchInbox = createServerFn({ method: 'GET' })
     const session = await requireSession()
     await requireBusinessOwner(data.businessId, session.user.id)
 
-    const whereBase = { businessId: data.businessId }
-    let where: Record<string, unknown> = whereBase
+    let actionWhere: Record<string, unknown> = { businessId: data.businessId }
+    let orderWhere: Record<string, unknown> = { businessId: data.businessId }
+    const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS)
+
     if (data.tab === 'mine') {
-      where = { ...whereBase, status: 'PENDING' }
+      actionWhere = { ...actionWhere, status: 'PENDING' }
+      orderWhere = { ...orderWhere, status: 'PAID', acknowledgedAt: null }
     } else if (data.tab === 'recent') {
-      where = {
-        ...whereBase,
-        status: { not: 'AUTO_SENT' },
-        createdAt: { gte: new Date(Date.now() - SEVEN_DAYS_MS) },
-      }
+      actionWhere = { ...actionWhere, status: { not: 'AUTO_SENT' }, createdAt: { gte: sevenDaysAgo } }
+      orderWhere = { ...orderWhere, status: { in: ['PAID', 'CANCELLED'] }, createdAt: { gte: sevenDaysAgo } }
     } else if (data.tab === 'unread') {
-      where = { ...whereBase, status: { not: 'AUTO_SENT' }, viewedAt: null }
+      actionWhere = { ...actionWhere, status: { not: 'AUTO_SENT' }, viewedAt: null }
+      orderWhere = { ...orderWhere, status: 'PAID', acknowledgedAt: null }
     }
 
-    const actions = await prisma.agentAction.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-    })
-    return actions.map(serializeAction)
+    const [actions, orders] = await Promise.all([
+      prisma.agentAction.findMany({ where: actionWhere, orderBy: { createdAt: 'desc' } }),
+      prisma.order.findMany({
+        where: orderWhere,
+        orderBy: { createdAt: 'desc' },
+        include: { product: { select: { name: true } } },
+      }),
+    ])
+
+    const items = [
+      ...actions.map((a) => ({ kind: 'action' as const, action: serializeAction(a), createdAt: a.createdAt })),
+      ...orders.map((o) => ({
+        kind: 'order' as const,
+        order: {
+          id: o.id,
+          businessId: o.businessId,
+          productName: o.product.name,
+          qty: o.qty,
+          totalAmount: Number(o.totalAmount),
+          buyerName: o.buyerName,
+          buyerContact: o.buyerContact,
+          status: o.status,
+          paidAt: o.paidAt,
+          acknowledgedAt: o.acknowledgedAt,
+          createdAt: o.createdAt,
+        },
+        createdAt: o.createdAt,
+      })),
+    ]
+    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    return items.map(({ createdAt, ...rest }) => rest)
   })
 
 export const fetchTabCounts = createServerFn({ method: 'GET' })
@@ -80,20 +107,32 @@ export const fetchTabCounts = createServerFn({ method: 'GET' })
     const session = await requireSession()
     await requireBusinessOwner(data.businessId, session.user.id)
 
-    const [mine, recent, unread] = await Promise.all([
+    const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS)
+    const [mineActions, mineOrders, recentActions, recentOrders, unreadActions, unreadOrders] = await Promise.all([
       prisma.agentAction.count({ where: { businessId: data.businessId, status: 'PENDING' } }),
+      prisma.order.count({ where: { businessId: data.businessId, status: 'PAID', acknowledgedAt: null } }),
       prisma.agentAction.count({
         where: {
           businessId: data.businessId,
           status: { not: 'AUTO_SENT' },
-          createdAt: { gte: new Date(Date.now() - SEVEN_DAYS_MS) },
+          createdAt: { gte: sevenDaysAgo },
         },
       }),
-      prisma.agentAction.count({
-        where: { businessId: data.businessId, status: { not: 'AUTO_SENT' }, viewedAt: null },
+      prisma.order.count({
+        where: {
+          businessId: data.businessId,
+          status: { in: ['PAID', 'CANCELLED'] },
+          createdAt: { gte: sevenDaysAgo },
+        },
       }),
+      prisma.agentAction.count({ where: { businessId: data.businessId, status: { not: 'AUTO_SENT' }, viewedAt: null } }),
+      prisma.order.count({ where: { businessId: data.businessId, status: 'PAID', acknowledgedAt: null } }),
     ])
-    return { mine, recent, unread }
+    return {
+      mine: mineActions + mineOrders,
+      recent: recentActions + recentOrders,
+      unread: unreadActions + unreadOrders,
+    }
   })
 
 export const markAsViewed = createServerFn({ method: 'POST' })
