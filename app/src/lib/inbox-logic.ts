@@ -15,6 +15,12 @@ export interface InboxAction {
   agentType: string
   createdAt: Date
   updatedAt: Date
+  bestDraft: string | null
+  escalationSummary: string | null
+}
+
+export function pickDisplayDraft(action: Pick<InboxAction, 'bestDraft' | 'draftReply'>): string {
+  return action.bestDraft ?? action.draftReply
 }
 
 export interface InboxOrder {

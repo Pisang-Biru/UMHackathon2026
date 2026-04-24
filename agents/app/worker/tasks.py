@@ -1,5 +1,5 @@
 from app.worker.celery_app import celery
-from app.db import SessionLocal, Product
+from app.db import SessionLocal, Product, Order, OrderStatus
 from app.memory import repo
 from app.memory.embedder import embed
 
@@ -63,9 +63,41 @@ def embed_past_action(self, action_id: str):
 
 
 import os
-from sqlalchemy import select, func
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import select, func, update
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+
+
+@celery.task
+def expire_pending_orders():
+    ttl_min = int(os.environ.get("ORDER_EXPIRY_MINUTES", "30"))
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl_min)
+    with SessionLocal() as session:
+        stale = session.execute(
+            select(Order.id, Order.productId, Order.qty)
+            .where(Order.status == OrderStatus.PENDING_PAYMENT, Order.createdAt < cutoff)
+        ).all()
+
+        for order_id, product_id, qty in stale:
+            affected = session.execute(
+                update(Order)
+                .where(Order.id == order_id, Order.status == OrderStatus.PENDING_PAYMENT)
+                .values(status=OrderStatus.CANCELLED)
+            ).rowcount
+            if affected == 1:
+                session.execute(
+                    update(Product)
+                    .where(Product.id == product_id)
+                    .values(stock=Product.stock + qty)
+                )
+                session.commit()
+                try:
+                    embed_product.delay(product_id)
+                except Exception:
+                    pass
+            else:
+                session.rollback()
 
 
 def _llm_summarize(turns) -> str:

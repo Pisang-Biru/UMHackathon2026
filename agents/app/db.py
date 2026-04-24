@@ -1,5 +1,9 @@
 import os
-from sqlalchemy import create_engine, Column, String, Float, Integer, Text, DateTime, Enum as SAEnum, Numeric
+from sqlalchemy import (
+    create_engine, Column, String, Float, Integer, Text, DateTime,
+    Enum as SAEnum, Numeric, text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from datetime import datetime, timezone
 import enum
@@ -50,8 +54,10 @@ class AgentAction(Base):
     confidence = Column(Float, nullable=False)
     reasoning = Column(Text, nullable=False)
     status = Column(SAEnum(AgentActionStatus, name="AgentActionStatus"), nullable=False, default=AgentActionStatus.PENDING)
+    iterations = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    approvedAt = Column(DateTime, nullable=True)
 
 
 class OrderStatus(enum.Enum):
@@ -72,6 +78,7 @@ class Order(Base):
     status = Column(SAEnum(OrderStatus, name="OrderStatus"), nullable=False, default=OrderStatus.PENDING_PAYMENT)
     buyerName = Column(String, nullable=True)
     buyerContact = Column(String, nullable=True)
+    paymentUrl = Column(String, nullable=True)
     paidAt = Column(DateTime, nullable=True)
     acknowledgedAt = Column(DateTime, nullable=True)
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))

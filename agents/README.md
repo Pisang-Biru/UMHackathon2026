@@ -192,6 +192,7 @@ All infra (Postgres + pgvector, RabbitMQ) and all agent services (FastAPI, Celer
 ./scripts/dev.sh up          # first run: builds + seeds
 ./scripts/dev.sh logs        # tail api + worker
 ./scripts/dev.sh psql        # shell into the DB
+./scripts/dev.sh env         # reload services after editing agents/.env
 ./scripts/dev.sh reset       # wipe volumes + re-seed
 ```
 

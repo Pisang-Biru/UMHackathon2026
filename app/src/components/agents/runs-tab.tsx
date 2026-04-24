@@ -12,8 +12,7 @@ interface RunsTabProps {
   onFilterChange: (status: FilterStatus) => void
   onSelect: (action: InboxAction) => void
   onLoadMore: () => Promise<void>
-  onApprove: (action: InboxAction) => Promise<void>
-  onEdit: (action: InboxAction, reply: string) => Promise<void>
+  onApprove: (action: InboxAction, reply: string) => Promise<void>
   onReject: (action: InboxAction) => Promise<void>
 }
 
@@ -80,7 +79,6 @@ export function RunsTab(props: RunsTabProps) {
         action={selected}
         readOnly={!isPending}
         onApprove={isPending ? props.onApprove : undefined}
-        onEdit={isPending ? props.onEdit : undefined}
         onReject={isPending ? props.onReject : undefined}
       />
     </div>

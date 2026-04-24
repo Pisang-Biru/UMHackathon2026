@@ -24,5 +24,9 @@ celery.conf.update(
             "task": "app.worker.tasks.summarize_old_turns",
             "schedule": float(os.environ.get("MEMORY_SUMMARY_INTERVAL_SEC", "3600")),
         },
+        "expire-pending-orders": {
+            "task": "app.worker.tasks.expire_pending_orders",
+            "schedule": float(os.environ.get("ORDER_EXPIRY_CHECK_INTERVAL_SEC", "300")),
+        },
     },
 )

@@ -30,8 +30,15 @@ async function requireActionOwner(actionId: string, userId: string) {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
+const AGENTS_BASE_URL = process.env.AGENTS_URL ?? 'http://localhost:8000'
+
 function serializeAction(a: any) {
-  return { ...a, costUsd: a.costUsd == null ? null : a.costUsd.toNumber() }
+  return {
+    ...a,
+    costUsd: a.costUsd == null ? null : a.costUsd.toNumber(),
+    bestDraft: a.bestDraft ?? null,
+    escalationSummary: a.escalationSummary ?? null,
+  }
 }
 
 export const fetchInbox = createServerFn({ method: 'GET' })
@@ -158,15 +165,20 @@ export const approveAction = createServerFn({ method: 'POST' })
     if (typeof data !== 'object' || data === null || typeof (data as Record<string, unknown>).actionId !== 'string') {
       throw new Error('Invalid input')
     }
-    return { actionId: (data as { actionId: string }).actionId }
+    const d = data as Record<string, unknown>
+    return {
+      actionId: d.actionId as string,
+      reply: typeof d.reply === 'string' ? d.reply : null,
+    }
   })
   .handler(async ({ data }) => {
     const session = await requireSession()
     const action = await requireActionOwner(data.actionId, session.user.id)
     if (action.status !== 'PENDING') throw new Error(`Action is ${action.status}, not PENDING`)
+    const finalReply = data.reply ?? action.draftReply
     const updated = await prisma.agentAction.update({
       where: { id: data.actionId },
-      data: { status: 'APPROVED', finalReply: action.draftReply },
+      data: { status: 'APPROVED', finalReply },
     })
     return serializeAction(updated)
   })
@@ -207,3 +219,20 @@ export const rejectAction = createServerFn({ method: 'POST' })
     })
     return serializeAction(updated)
   })
+
+export async function unsendAction(actionId: string): Promise<void> {
+  const r = await fetch(`${AGENTS_BASE_URL}/agent/actions/${actionId}/unsend`, {
+    method: 'POST',
+  })
+  if (!r.ok) {
+    const detail = await r.text()
+    throw new Error(`Unsend failed: ${r.status} ${detail}`)
+  }
+}
+
+export async function fetchIterations(actionId: string): Promise<unknown[]> {
+  const r = await fetch(`${AGENTS_BASE_URL}/agent/actions/${actionId}/iterations`)
+  if (!r.ok) throw new Error(`Iterations fetch failed: ${r.status}`)
+  const data = await r.json()
+  return data.iterations ?? []
+}

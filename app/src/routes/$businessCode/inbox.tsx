@@ -6,7 +6,6 @@ import {
   fetchTabCounts,
   markAsViewed,
   approveAction,
-  editAction,
   rejectAction,
 } from '#/lib/inbox-server-fns'
 import { acknowledgeOrder } from '#/lib/order-server-fns'
@@ -52,6 +51,8 @@ function normalizeAction(raw: any): InboxAction {
     createdAt: new Date(raw.createdAt),
     updatedAt: new Date(raw.updatedAt),
     viewedAt: raw.viewedAt ? new Date(raw.viewedAt) : null,
+    bestDraft: raw.bestDraft ?? null,
+    escalationSummary: raw.escalationSummary ?? null,
   }
 }
 
@@ -130,20 +131,8 @@ function InboxPage() {
     }
   }
 
-  async function handleApprove(action: InboxAction) {
-    const updated = await approveAction({ data: { actionId: action.id } })
-    const u = normalizeAction(updated)
-    setItems((prev) =>
-      tab === 'mine'
-        ? prev.filter((it) => !(it.kind === 'action' && it.action.id === u.id))
-        : prev.map((it) => (it.kind === 'action' && it.action.id === u.id ? { kind: 'action', action: u } : it)),
-    )
-    await refreshCounts()
-    setSelected(null)
-  }
-
-  async function handleEdit(action: InboxAction, reply: string) {
-    const updated = await editAction({ data: { actionId: action.id, reply } })
+  async function handleApprove(action: InboxAction, reply: string) {
+    const updated = await approveAction({ data: { actionId: action.id, reply } })
     const u = normalizeAction(updated)
     setItems((prev) =>
       tab === 'mine'
@@ -222,7 +211,6 @@ function InboxPage() {
             <ActionDetailPanel
               action={selectedItem?.kind === 'action' ? selectedItem.action : null}
               onApprove={handleApprove}
-              onEdit={handleEdit}
               onReject={handleReject}
             />
           )}

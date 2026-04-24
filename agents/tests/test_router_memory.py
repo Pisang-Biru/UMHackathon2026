@@ -11,10 +11,10 @@ def test_support_chat_accepts_customer_phone(monkeypatch):
     async def fake_ainvoke(state):
         captured.update(state)
         return {
-            "action": "auto_send",
             "draft_reply": "hi back",
-            "action_id": "act1",
             "confidence": 0.9,
+            "reasoning": "clear",
+            "structured_reply": None,
         }
 
     monkeypatch.setattr(support_router, "_support_graph_ainvoke", fake_ainvoke)
@@ -36,7 +36,7 @@ def test_support_chat_without_phone_defaults_empty(monkeypatch):
 
     async def fake_ainvoke(state):
         captured.update(state)
-        return {"action": "auto_send", "draft_reply": "ok", "action_id": "a", "confidence": 0.9}
+        return {"draft_reply": "ok", "confidence": 0.9, "reasoning": "clear", "structured_reply": None}
 
     monkeypatch.setattr(support_router, "_support_graph_ainvoke", fake_ainvoke)
 
@@ -55,9 +55,16 @@ def test_approve_enqueues_past_action(monkeypatch):
     from datetime import datetime, timezone
     from app.db import SessionLocal, AgentAction, AgentActionStatus
     import cuid2
+
+    # Patch _get_past_action_task to capture apply_async calls (deferred enqueue)
     calls = []
-    monkeypatch.setattr(support_router, "_enqueue_past_action",
-                         lambda action_id: calls.append(action_id))
+    class _FakeTask:
+        def apply_async(self, kwargs=None, countdown=None):
+            calls.append(kwargs.get("action_id") if kwargs else None)
+            class _Result:
+                id = "task-stub"
+            return _Result()
+    monkeypatch.setattr(support_router, "_get_past_action_task", lambda: _FakeTask())
 
     aid = cuid2.Cuid().generate()
     with SessionLocal() as s:

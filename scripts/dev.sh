@@ -69,6 +69,11 @@ EOF
     SEED=true $COMPOSE --profile init run --rm agents-init
     ;;
 
+  env)
+    echo "==> reloading agents services with fresh agents/.env"
+    $COMPOSE restart agents-api agents-worker agents-beat
+    ;;
+
   logs)
     $COMPOSE logs -f "${@:-agents-api agents-worker}"
     ;;
@@ -96,6 +101,7 @@ Usage: ./scripts/dev.sh <command>
   reset           destroy volumes + restart from scratch
   init            run alembic + prisma migrate + preload bge-m3
   seed            same as init but force-seed demo data
+  env             reload agents services after editing agents/.env
   logs [svc...]   tail logs (default: api + worker)
   ps              show container status
   shell [svc]     bash into service (default: agents-api)
