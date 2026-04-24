@@ -1,4 +1,5 @@
 # agents/tests/test_manager_gates.py
+import pytest
 from langchain_core.messages import HumanMessage
 from app.schemas.agent_io import StructuredReply, FactRef
 from app.agents.manager_gates import run_gates
@@ -79,3 +80,34 @@ def test_gate3_critique_populated_on_revise():
     r = run_gates(d, valid_fact_ids=set(), revision_count=0, messages=_msgs("q"))
     assert r.critique is not None
     assert "shipping?" in r.critique.unanswered_questions
+
+
+# ---- FACTUAL_Q_RE recall envelope ----
+# These tests lock in the current set of phrases that trigger gate 5.
+# When the regex is tuned, these tests MUST be updated so the recall
+# envelope is never silently changed.
+@pytest.mark.parametrize("phrase", [
+    "berapa harga ondeh?",
+    "how much is this",
+    "ada stock tak?",          # "stock" keyword
+    "cost?",
+    "when will it arrive",
+    "bila sampai?",
+    "bagaimana saya beli?",
+    "macam mana nak order?",
+])
+def test_factual_q_regex_matches_expected_phrases(phrase):
+    d = _draft(facts_used=[])
+    r = run_gates(d, valid_fact_ids=set(), revision_count=0, messages=_msgs(phrase))
+    assert r.verdict == "revise", f"expected gate 5 to trigger on {phrase!r}, got {r.verdict}"
+
+
+@pytest.mark.parametrize("phrase", [
+    "terima kasih ada jumpa lagi",   # idiom, must NOT match via 'ada'
+    "apa khabar",                     # greeting, no factual signal
+    "ok thanks",
+])
+def test_factual_q_regex_ignores_non_factual(phrase):
+    d = _draft(facts_used=[])
+    r = run_gates(d, valid_fact_ids=set(), revision_count=0, messages=_msgs(phrase))
+    assert r.verdict is None, f"expected no gate 5 hit on {phrase!r}, got {r.verdict}"

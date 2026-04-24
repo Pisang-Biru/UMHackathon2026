@@ -18,6 +18,9 @@ from app.agents.manager_terminal import make_finalize_node, make_queue_for_human
 _log = logging.getLogger(__name__)
 
 
+# NOTE: ManagerState is total=False so node return dicts don't need to
+# repeat every key. Callers MUST still seed `business_id`, `messages`, and
+# `iterations` when invoking the graph — nodes index them without fallback.
 class ManagerState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     business_id: str

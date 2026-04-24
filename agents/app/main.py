@@ -23,6 +23,8 @@ support_graph = build_customer_support_agent(llm)
 import os as _os_for_flag
 from app.agents.manager import build_manager_graph as _build_manager_graph
 
+# MANAGER_ENABLED is read once at import time. Flipping the env var
+# requires restarting the agents process (docker compose restart).
 _MANAGER_ENABLED = _os_for_flag.environ.get("MANAGER_ENABLED", "false").lower() == "true"
 
 if _MANAGER_ENABLED:
