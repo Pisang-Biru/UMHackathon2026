@@ -1,0 +1,115 @@
+name: pisang-dev
+
+x-agents-env: &agents-env
+  DATABASE_URL: postgresql://postgres:root@postgres:5432/pisangbisnes
+  CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+  EMBED_MODEL: BAAI/bge-m3
+  MEMORY_ENABLED: "true"
+  MEMORY_RECENT_TURNS: "20"
+  MEMORY_SUMMARY_BATCH: "20"
+  MEMORY_SUMMARY_INTERVAL_SEC: "3600"
+  MEMORY_DISPLAY_TZ: Asia/Kuala_Lumpur
+  APP_URL: http://host.docker.internal:3000
+  POSTGRES_HOST: postgres
+  POSTGRES_USER: postgres
+  RABBITMQ_HOST: rabbitmq
+  MODEL: ${MODEL:-}
+  API_KEY: ${API_KEY:-}
+  OPENAI_API_BASE: ${OPENAI_API_BASE:-}
+
+x-agents-common: &agents-common
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: pisangbisnes
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pisangbisnes"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  agents-init:
+    build:
+      context: .
+      dockerfile: agents/Dockerfile
+    image: pisang-agents:dev
+    profiles: ["init"]
+    <<: *agents-common
+    environment:
+      <<: *agents-env
+      SERVICE_ROLE: init
+      SEED: ${SEED:-true}
+    volumes:
+      - ./agents:/app
+      - ./app:/app-ts:ro
+      - hf-cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agents-api:
+    image: pisang-agents:dev
+    <<: *agents-common
+    environment:
+      <<: *agents-env
+      SERVICE_ROLE: api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./agents:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agents-worker:
+    image: pisang-agents:dev
+    <<: *agents-common
+    environment:
+      <<: *agents-env
+      SERVICE_ROLE: worker
+    volumes:
+      - ./agents:/app
+      - hf-cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  agents-beat:
+    image: pisang-agents:dev
+    <<: *agents-common
+    environment:
+      <<: *agents-env
+      SERVICE_ROLE: beat
+    volumes:
+      - ./agents:/app
+      - hf-cache:/root/.cache/huggingface
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  pg-data:
+  hf-cache:

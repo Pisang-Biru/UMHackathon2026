@@ -1,3 +1,5 @@
 .venv
 .env
 __pycache__
+# Celery beat scheduler state (local, per-process)
+celerybeat-schedule*
