@@ -11,8 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode.dashboard'
+import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode/products'
+import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/inbox'
+import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as BusinessCodeAgentsAgentTypeRouteImport } from './routes/$businessCode/agents/$agentType'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -22,6 +25,16 @@ const LoginRoute = LoginRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessCodeProductsRoute = BusinessCodeProductsRouteImport.update({
+  id: '/$businessCode/products',
+  path: '/$businessCode/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessCodeInboxRoute = BusinessCodeInboxRouteImport.update({
+  id: '/$businessCode/inbox',
+  path: '/$businessCode/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BusinessCodeDashboardRoute = BusinessCodeDashboardRouteImport.update({
@@ -34,17 +47,29 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BusinessCodeAgentsAgentTypeRoute =
+  BusinessCodeAgentsAgentTypeRouteImport.update({
+    id: '/$businessCode/agents/$agentType',
+    path: '/$businessCode/agents/$agentType',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/inbox': typeof BusinessCodeInboxRoute
+  '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/inbox': typeof BusinessCodeInboxRoute
+  '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
@@ -52,20 +77,48 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/inbox': typeof BusinessCodeInboxRoute
+  '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/$businessCode/dashboard' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/$businessCode/dashboard'
+    | '/$businessCode/inbox'
+    | '/$businessCode/products'
+    | '/$businessCode/agents/$agentType'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/$businessCode/dashboard' | '/api/auth/$'
-  id: '__root__' | '/' | '/login' | '/$businessCode/dashboard' | '/api/auth/$'
+  to:
+    | '/'
+    | '/login'
+    | '/$businessCode/dashboard'
+    | '/$businessCode/inbox'
+    | '/$businessCode/products'
+    | '/$businessCode/agents/$agentType'
+    | '/api/auth/$'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/$businessCode/dashboard'
+    | '/$businessCode/inbox'
+    | '/$businessCode/products'
+    | '/$businessCode/agents/$agentType'
+    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   BusinessCodeDashboardRoute: typeof BusinessCodeDashboardRoute
+  BusinessCodeInboxRoute: typeof BusinessCodeInboxRoute
+  BusinessCodeProductsRoute: typeof BusinessCodeProductsRoute
+  BusinessCodeAgentsAgentTypeRoute: typeof BusinessCodeAgentsAgentTypeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -85,6 +138,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/products': {
+      id: '/$businessCode/products'
+      path: '/$businessCode/products'
+      fullPath: '/$businessCode/products'
+      preLoaderRoute: typeof BusinessCodeProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$businessCode/inbox': {
+      id: '/$businessCode/inbox'
+      path: '/$businessCode/inbox'
+      fullPath: '/$businessCode/inbox'
+      preLoaderRoute: typeof BusinessCodeInboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$businessCode/dashboard': {
       id: '/$businessCode/dashboard'
       path: '/$businessCode/dashboard'
@@ -99,6 +166,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/agents/$agentType': {
+      id: '/$businessCode/agents/$agentType'
+      path: '/$businessCode/agents/$agentType'
+      fullPath: '/$businessCode/agents/$agentType'
+      preLoaderRoute: typeof BusinessCodeAgentsAgentTypeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,6 +180,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   BusinessCodeDashboardRoute: BusinessCodeDashboardRoute,
+  BusinessCodeInboxRoute: BusinessCodeInboxRoute,
+  BusinessCodeProductsRoute: BusinessCodeProductsRoute,
+  BusinessCodeAgentsAgentTypeRoute: BusinessCodeAgentsAgentTypeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
