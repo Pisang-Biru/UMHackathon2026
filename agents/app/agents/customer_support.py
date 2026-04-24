@@ -114,7 +114,7 @@ def _build_context(business_id: str) -> str:
     return "\n".join(lines)
 
 
-def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: str | None = None) -> str:
+def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: str | None = None) -> tuple[str, str]:
     if qty <= 0:
         raise ValueError("qty must be positive")
     with SessionLocal() as session:
@@ -141,6 +141,7 @@ def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: st
 
         order_id = generate_cuid()
         total = unit_price * Decimal(qty)
+        payment_url = f"{APP_URL}/pay/{order_id}"
         order = Order(
             id=order_id,
             businessId=business_id,
@@ -151,6 +152,7 @@ def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: st
             totalAmount=total,
             status=OrderStatus.PENDING_PAYMENT,
             buyerContact=buyer_contact or None,
+            paymentUrl=payment_url,
         )
         session.add(order)
         session.commit()
@@ -159,7 +161,7 @@ def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: st
             embed_product.delay(product_id)
         except Exception:
             pass
-        return order_id
+        return order_id, payment_url
 
 
 SYSTEM_TEMPLATE = """\
@@ -340,8 +342,10 @@ def build_customer_support_agent(llm):
             Returns a URL the buyer can open to pay, or an error message.
             """
             try:
-                order_id = _create_order(business_id, product_id, qty, buyer_contact=customer_phone or None)
-                return f"{APP_URL}/pay/{order_id}"
+                _order_id, payment_url = _create_order(
+                    business_id, product_id, qty, buyer_contact=customer_phone or None
+                )
+                return payment_url
             except Exception as e:
                 return f"ERROR: {e}"
         return create_payment_link

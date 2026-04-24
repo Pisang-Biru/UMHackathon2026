@@ -38,7 +38,7 @@ def test_create_order_reserves_stock(TestSession, monkeypatch):
     monkeypatch.setattr(tasks, "SessionLocal", TestSession)
     monkeypatch.setattr(tasks, "embed", lambda texts: [[0.1] * 1024 for _ in texts])
 
-    order_id = customer_support._create_order("biz1", pid, qty=2)
+    order_id, _payment_url = customer_support._create_order("biz1", pid, qty=2)
 
     with TestSession() as s:
         p = s.query(Product).filter_by(id=pid).first()
