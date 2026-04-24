@@ -268,7 +268,8 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
                 if order.status == OrderStatus.PAID and order.paidAt:
                     parts.append(f"paid {order.paidAt.date().isoformat()}")
                 if order.status == OrderStatus.PENDING_PAYMENT:
-                    parts.append(f"pay: {APP_URL}/pay/{order.id}")
+                    pay_url = order.paymentUrl or f"{APP_URL}/pay/{order.id}"
+                    parts.append(f"pay: {pay_url}")
                 lines.append(" • ".join(parts))
             return "\n".join(lines)
         except Exception as e:

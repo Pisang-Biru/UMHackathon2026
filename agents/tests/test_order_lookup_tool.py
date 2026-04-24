@@ -28,7 +28,7 @@ def test_create_order_persists_buyer_contact(session):
 
 def _seed_order(session, order_id, phone, status=OrderStatus.PENDING_PAYMENT,
                 business_id="biz1", product_id="p1", qty=1, paid_at=None,
-                created_at=None):
+                created_at=None, payment_url=None):
     session.add(Order(
         id=order_id,
         businessId=business_id,
@@ -41,6 +41,7 @@ def _seed_order(session, order_id, phone, status=OrderStatus.PENDING_PAYMENT,
         buyerContact=phone,
         paidAt=paid_at,
         createdAt=created_at or datetime.now(timezone.utc),
+        paymentUrl=payment_url,
     ))
     session.commit()
 
@@ -114,3 +115,33 @@ def test_lookup_missing_phone_returns_error_string(session):
     tool = _make_order_lookup_tool("biz1", "")
     result = tool.invoke({})
     assert result.startswith("ERROR:")
+
+
+def test_lookup_uses_stored_payment_url_when_present(session):
+    _seed_product(session)
+    _seed_order(
+        session,
+        "order-stored1111111111",
+        "+60123456789",
+        status=OrderStatus.PENDING_PAYMENT,
+        payment_url="https://example.com/pay/override",
+    )
+    tool = _make_order_lookup_tool("biz1", "+60123456789")
+    result = tool.invoke({})
+    assert "https://example.com/pay/override" in result
+    assert "/pay/order-stored1111111111" not in result
+
+
+def test_lookup_falls_back_to_recomputed_url_when_null(session):
+    from app.agents.customer_support import APP_URL
+    _seed_product(session)
+    _seed_order(
+        session,
+        "order-nullurl11111111",
+        "+60123456789",
+        status=OrderStatus.PENDING_PAYMENT,
+        payment_url=None,
+    )
+    tool = _make_order_lookup_tool("biz1", "+60123456789")
+    result = tool.invoke({})
+    assert f"{APP_URL}/pay/order-nullurl11111111" in result
