@@ -69,3 +69,27 @@ def test_embed_kb_chunk_writes_row(session, engine, monkeypatch):
     rows = session.query(models.MemoryKbChunk).filter_by(sourceId="docA").all()
     assert len(rows) == 1
     assert rows[0].content == "We ship KL same day"
+
+
+def test_embed_past_action_upserts(session, engine, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    from datetime import datetime, timezone
+    from app.db import AgentAction, AgentActionStatus
+    TestSession = sessionmaker(bind=engine)
+    with TestSession() as s:
+        s.add(AgentAction(id="act1", businessId="biz1", customerMsg="refund?",
+                           draftReply="sure", finalReply="sure",
+                           confidence=0.9, reasoning="ok",
+                           status=AgentActionStatus.APPROVED,
+                           createdAt=datetime.now(timezone.utc),
+                           updatedAt=datetime.now(timezone.utc)))
+        s.commit()
+
+    monkeypatch.setattr(tasks, "SessionLocal", TestSession)
+    monkeypatch.setattr(tasks, "embed", lambda texts: [[0.4] * 1024])
+
+    tasks.embed_past_action.delay("act1")
+    tasks.embed_past_action.delay("act1")
+
+    rows = session.query(models.MemoryPastAction).filter_by(id="act1").all()
+    assert len(rows) == 1

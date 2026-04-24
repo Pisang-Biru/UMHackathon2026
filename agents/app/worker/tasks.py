@@ -41,3 +41,22 @@ def embed_kb_chunk(self, business_id: str, source_id: str, chunk_index: int, con
             session.commit()
     except Exception as e:
         raise self.retry(exc=e)
+
+
+from app.db import AgentAction
+
+
+@celery.task(bind=True, max_retries=3, default_retry_delay=30)
+def embed_past_action(self, action_id: str):
+    try:
+        with SessionLocal() as session:
+            a = session.query(AgentAction).filter(AgentAction.id == action_id).first()
+            if not a:
+                return
+            msg = a.customerMsg
+            reply = a.finalReply or a.draftReply
+            vec = embed([msg])[0]
+            repo.upsert_past_action(session, a.id, a.businessId, msg, reply, vec)
+            session.commit()
+    except Exception as e:
+        raise self.retry(exc=e)
