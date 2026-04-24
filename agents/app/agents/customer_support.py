@@ -181,8 +181,8 @@ Purchase flow:
 - Never invent a payment URL.
 
 Order status flow:
-- If the buyer asks about past purchases, existing orders, or whether a payment succeeded (e.g. "ada saya beli barang?", "did my payment go through?"), call check_order_status with the buyer's phone number from the memory/context above.
-- Report what the tool returns. Do not guess — if the tool says "no orders found for this phone", tell the buyer that directly.
+- If the buyer asks about past purchases, existing orders, or whether a payment succeeded (e.g. "ada saya beli barang?", "did my payment go through?"), call check_order_status (no arguments — it knows the current buyer).
+- Report what the tool returns. Do not guess — if the tool says "no orders found for this phone", tell the buyer that directly. If the tool returns an ERROR, tell the buyer their phone is not on file and ask them to share it.
 
 After any tool calls, you MUST respond with valid JSON only, no other text:
 {{
@@ -225,20 +225,19 @@ async def _load_memory_node(state: SupportAgentState) -> dict:
     return {"memory_block": block}
 
 
-def _make_order_lookup_tool(business_id: str):
+def _make_order_lookup_tool(business_id: str, customer_phone: str):
     @tool
-    def check_order_status(phone: str) -> str:
-        """Look up this buyer's recent orders and their payment status.
+    def check_order_status() -> str:
+        """Look up the current buyer's recent orders and their payment status.
 
         Call this whenever the buyer asks about past purchases, current orders,
-        or whether a payment succeeded. Never guess — always call this tool.
+        or whether a payment succeeded. Takes no arguments — it already knows
+        the current buyer. Never guess — always call this tool.
 
-        Args:
-            phone: the buyer's phone number (from conversation context)
         Returns up to 5 orders, newest first, or "no orders found for this phone".
         """
-        if not phone:
-            return "ERROR: phone required"
+        if not customer_phone:
+            return "ERROR: no phone on file for this buyer"
         try:
             with SessionLocal() as session:
                 rows = (
@@ -246,7 +245,7 @@ def _make_order_lookup_tool(business_id: str):
                     .outerjoin(Product, Product.id == Order.productId)
                     .filter(
                         Order.businessId == business_id,
-                        Order.buyerContact == phone,
+                        Order.buyerContact == customer_phone,
                     )
                     .order_by(Order.createdAt.desc())
                     .limit(5)
@@ -350,7 +349,7 @@ def build_customer_support_agent(llm):
     async def draft_reply(state: SupportAgentState) -> dict:
         payment_tool = _make_tool(state["business_id"], state.get("customer_phone") or "")
         memory_tool = _make_search_memory_tool(state["business_id"])
-        order_tool = _make_order_lookup_tool(state["business_id"])
+        order_tool = _make_order_lookup_tool(state["business_id"], state.get("customer_phone") or "")
         llm_with_tools = llm.bind_tools([payment_tool, memory_tool, order_tool])
         system_prompt = SYSTEM_TEMPLATE.format(
             context=state["business_context"],

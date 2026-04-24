@@ -45,8 +45,8 @@ def _seed_order(session, order_id, phone, status=OrderStatus.PENDING_PAYMENT,
 
 def test_lookup_returns_no_orders_when_empty(session):
     _seed_product(session)
-    tool = _make_order_lookup_tool("biz1")
-    result = tool.invoke({"phone": "+60123456789"})
+    tool = _make_order_lookup_tool("biz1", "+60123456789")
+    result = tool.invoke({})
     assert result == "no orders found for this phone"
 
 
@@ -54,8 +54,8 @@ def test_lookup_returns_pending_order_with_pay_url(session):
     _seed_product(session)
     _seed_order(session, "order-aaaaaaaabbbbbbbb", "+60123456789",
                 status=OrderStatus.PENDING_PAYMENT, qty=20)
-    tool = _make_order_lookup_tool("biz1")
-    result = tool.invoke({"phone": "+60123456789"})
+    tool = _make_order_lookup_tool("biz1", "+60123456789")
+    result = tool.invoke({})
     assert "order-aa" in result
     assert "20x Pisang" in result
     assert "PENDING_PAYMENT" in result
@@ -67,8 +67,8 @@ def test_lookup_returns_paid_order_without_pay_url(session):
     paid = datetime.now(timezone.utc)
     _seed_order(session, "order-paid1111111111111", "+60123456789",
                 status=OrderStatus.PAID, paid_at=paid)
-    tool = _make_order_lookup_tool("biz1")
-    result = tool.invoke({"phone": "+60123456789"})
+    tool = _make_order_lookup_tool("biz1", "+60123456789")
+    result = tool.invoke({})
     assert "PAID" in result
     assert "/pay/" not in result
     assert "paid " in result
@@ -80,8 +80,8 @@ def test_lookup_orders_newest_first_limit_5(session):
     for i in range(7):
         _seed_order(session, f"order-{i:016d}", "+60123456789",
                     created_at=base - timedelta(days=7 - i))
-    tool = _make_order_lookup_tool("biz1")
-    result = tool.invoke({"phone": "+60123456789"})
+    tool = _make_order_lookup_tool("biz1", "+60123456789")
+    result = tool.invoke({})
     lines = [line for line in result.splitlines() if line.strip()]
     assert len(lines) == 5
     assert "order-00" in lines[0]
@@ -102,13 +102,13 @@ def test_lookup_scopes_by_business_id(session):
     session.commit()
     _seed_order(session, "order-other-biz-11111", "+60123456789",
                 business_id="biz2", product_id="p2")
-    tool = _make_order_lookup_tool("biz1")
-    result = tool.invoke({"phone": "+60123456789"})
+    tool = _make_order_lookup_tool("biz1", "+60123456789")
+    result = tool.invoke({})
     assert result == "no orders found for this phone"
 
 
 def test_lookup_missing_phone_returns_error_string(session):
     _seed_product(session)
-    tool = _make_order_lookup_tool("biz1")
-    result = tool.invoke({"phone": ""})
+    tool = _make_order_lookup_tool("biz1", "")
+    result = tool.invoke({})
     assert result.startswith("ERROR:")
