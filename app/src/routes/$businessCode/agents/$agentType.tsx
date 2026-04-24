@@ -4,6 +4,7 @@ import { fetchBusinesses } from '#/lib/business-server-fns'
 import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget, KNOWN_AGENT_TYPES } from '#/lib/agent-server-fns'
 import { approveAction, editAction, rejectAction } from '#/lib/inbox-server-fns'
 import { fetchAgentSales } from '#/lib/order-server-fns'
+import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
 import { Sidebar } from '#/components/sidebar'
 import { AgentPageHeader } from '#/components/agents/agent-page-header'
@@ -38,8 +39,11 @@ export const Route = createFileRoute('/$businessCode/agents/$agentType')({
       }
       throw redirect({ to: '/' })
     }
-    const stats = await fetchAgentStats({ data: { businessId: current.id, agentType: params.agentType, rangeDays: 14 } })
-    return { businesses, current, agentType: params.agentType, stats }
+    const [stats, sidebarAgents] = await Promise.all([
+      fetchAgentStats({ data: { businessId: current.id, agentType: params.agentType, rangeDays: 14 } }),
+      fetchSidebarAgents({ data: { businessId: current.id } }),
+    ])
+    return { businesses, current, agentType: params.agentType, stats, sidebarAgents }
   },
   component: AgentPage,
 })
@@ -54,7 +58,7 @@ function normalize(raw: any): InboxAction {
 }
 
 function AgentPage() {
-  const { businesses, current, agentType, stats } = Route.useLoaderData()
+  const { businesses, current, agentType, stats, sidebarAgents } = Route.useLoaderData()
   const search = Route.useSearch()
   const navigate = useNavigate()
   const meta = getAgentMeta(agentType)
@@ -143,7 +147,6 @@ function AgentPage() {
     setRunsRows((prev) => prev.map((r) => (r.id === u.id ? u : r)))
   }
 
-  const sidebarAgents = [{ id: 'support', name: 'Support Agent', color: '#3b7ef8', live: false }]
   const latestRun = stats.latestRun ? normalize(stats.latestRun) : null
   const recent = stats.recent.map(normalize)
 

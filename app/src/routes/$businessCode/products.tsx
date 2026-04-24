@@ -3,6 +3,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { fetchBusinesses } from '#/lib/business-server-fns'
 import { fetchProducts, createProduct, updateProduct, deleteProduct } from '#/lib/product-server-fns'
+import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
 import { Sidebar } from '#/components/sidebar'
 import { ProductTable, type Product } from '#/components/products/product-table'
@@ -22,14 +23,17 @@ export const Route = createFileRoute('/$businessCode/products')({
       }
       throw redirect({ to: '/' })
     }
-    const initialProducts = await fetchProducts({ data: { businessId: current.id } })
-    return { businesses, current, initialProducts }
+    const [initialProducts, sidebarAgents] = await Promise.all([
+      fetchProducts({ data: { businessId: current.id } }),
+      fetchSidebarAgents({ data: { businessId: current.id } }),
+    ])
+    return { businesses, current, initialProducts, sidebarAgents }
   },
   component: ProductsPage,
 })
 
 function ProductsPage() {
-  const { businesses, current, initialProducts } = Route.useLoaderData()
+  const { businesses, current, initialProducts, sidebarAgents } = Route.useLoaderData()
 
   const [products, setProducts] = React.useState<Product[]>(
     initialProducts.map((p) => ({
@@ -103,7 +107,7 @@ function ProductsPage() {
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#0a0a0c' }}>
       <BusinessStrip businesses={businesses} />
-      <Sidebar business={current} agents={[]} />
+      <Sidebar business={current} agents={sidebarAgents} />
 
       <main className="flex-1 overflow-auto" style={{ background: '#111113' }}>
         {/* Header */}

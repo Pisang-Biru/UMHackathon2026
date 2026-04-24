@@ -10,6 +10,7 @@ import {
   rejectAction,
 } from '#/lib/inbox-server-fns'
 import { acknowledgeOrder } from '#/lib/order-server-fns'
+import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
 import { Sidebar } from '#/components/sidebar'
 import { InboxTabs } from '#/components/inbox/inbox-tabs'
@@ -35,11 +36,12 @@ export const Route = createFileRoute('/$businessCode/inbox')({
       }
       throw redirect({ to: '/' })
     }
-    const [initialItems, initialCounts] = await Promise.all([
+    const [initialItems, initialCounts, sidebarAgents] = await Promise.all([
       fetchInbox({ data: { businessId: current.id, tab: 'mine' } }),
       fetchTabCounts({ data: { businessId: current.id } }),
+      fetchSidebarAgents({ data: { businessId: current.id } }),
     ])
-    return { businesses, current, initialItems, initialCounts }
+    return { businesses, current, initialItems, initialCounts, sidebarAgents }
   },
   component: InboxPage,
 })
@@ -71,7 +73,7 @@ function normalizeItem(raw: any): InboxItem {
 type Selection = { kind: 'action'; id: string } | { kind: 'order'; id: string } | null
 
 function InboxPage() {
-  const { businesses, current, initialItems, initialCounts } = Route.useLoaderData()
+  const { businesses, current, initialItems, initialCounts, sidebarAgents } = Route.useLoaderData()
   const [tab, setTab] = React.useState<InboxTab>('mine')
   const [items, setItems] = React.useState<InboxItem[]>(initialItems.map(normalizeItem))
   const [counts, setCounts] = React.useState(initialCounts)
@@ -164,12 +166,10 @@ function InboxPage() {
     setSelected(null)
   }
 
-  const MOCK_SIDEBAR_AGENTS = [{ id: 'support', name: 'Support Agent', color: '#3b7ef8', live: false }]
-
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#0a0a0c' }}>
       <BusinessStrip businesses={businesses} />
-      <Sidebar business={current} agents={MOCK_SIDEBAR_AGENTS} />
+      <Sidebar business={current} agents={sidebarAgents} />
       <main className="flex-1 flex flex-col overflow-hidden" style={{ background: '#111113' }}>
         <div className="px-8 pt-6 pb-4 border-b" style={{ borderColor: '#1a1a1e' }}>
           <p className="text-[9px] uppercase tracking-[0.2em] mb-1" style={{ color: '#444', fontFamily: 'var(--font-mono)' }}>
