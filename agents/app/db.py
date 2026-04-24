@@ -36,6 +36,8 @@ class Product(Base):
     stock = Column(Integer, nullable=False, default=0)
     description = Column(Text, nullable=True)
     businessId = Column(String, nullable=False)
+    createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class AgentAction(Base):

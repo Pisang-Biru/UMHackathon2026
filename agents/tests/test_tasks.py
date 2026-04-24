@@ -31,3 +31,23 @@ def test_embed_and_store_turn_writes_row(session, engine, monkeypatch):
     assert len(rows) == 1
     assert rows[0].buyerMsg == "hi"
     assert len(rows[0].embedding) == 1024
+
+
+def test_embed_product_upserts(session, engine, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    from app.db import Product
+    TestSession = sessionmaker(bind=engine)
+    with TestSession() as s:
+        s.add(Product(id="p1", name="Sambal", price=9.9, stock=5,
+                       description="spicy", businessId="biz1"))
+        s.commit()
+
+    monkeypatch.setattr(tasks, "SessionLocal", TestSession)
+    monkeypatch.setattr(tasks, "embed", lambda texts: [[0.2] * 1024 for _ in texts])
+
+    tasks.embed_product.delay("p1")
+    tasks.embed_product.delay("p1")  # idempotent
+
+    rows = session.query(models.MemoryProductEmbedding).filter_by(productId="p1").all()
+    assert len(rows) == 1
+    assert "Sambal" in rows[0].content
