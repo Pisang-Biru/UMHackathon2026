@@ -74,3 +74,7 @@ class Order(Base):
     acknowledgedAt = Column(DateTime, nullable=True)
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+# Register memory models with Base.metadata so Alembic sees them.
+from app.memory import models as _memory_models  # noqa: F401,E402
