@@ -18,8 +18,20 @@ def engine():
     yield eng
 
 
+_MEMORY_TABLES = (
+    "memory_past_action",
+    "memory_product_embedding",
+    "memory_kb_chunk",
+    "memory_conversation_summary",
+    "memory_conversation_turn",
+)
+
+
 @pytest.fixture()
 def session(engine):
+    with engine.begin() as conn:
+        for t in _MEMORY_TABLES:
+            conn.execute(text(f'TRUNCATE TABLE "{t}" RESTART IDENTITY CASCADE'))
     Session = sessionmaker(bind=engine)
     with Session() as s:
         yield s
