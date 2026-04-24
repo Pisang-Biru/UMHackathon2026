@@ -13,9 +13,7 @@ x-agents-env: &agents-env
   POSTGRES_HOST: postgres
   POSTGRES_USER: postgres
   RABBITMQ_HOST: rabbitmq
-  MODEL: ${MODEL:-}
-  API_KEY: ${API_KEY:-}
-  OPENAI_API_BASE: ${OPENAI_API_BASE:-}
+  # LLM creds (MODEL, API_KEY, OPENAI_API_BASE) come from agents/.env via env_file
 
 x-agents-common: &agents-common
   extra_hosts:
@@ -56,6 +54,8 @@ services:
     image: pisang-agents:dev
     profiles: ["init"]
     <<: *agents-common
+    env_file:
+      - ./agents/.env
     environment:
       <<: *agents-env
       SERVICE_ROLE: init
@@ -71,6 +71,8 @@ services:
   agents-api:
     image: pisang-agents:dev
     <<: *agents-common
+    env_file:
+      - ./agents/.env
     environment:
       <<: *agents-env
       SERVICE_ROLE: api
@@ -85,6 +87,8 @@ services:
   agents-worker:
     image: pisang-agents:dev
     <<: *agents-common
+    env_file:
+      - ./agents/.env
     environment:
       <<: *agents-env
       SERVICE_ROLE: worker
@@ -100,6 +104,8 @@ services:
   agents-beat:
     image: pisang-agents:dev
     <<: *agents-common
+    env_file:
+      - ./agents/.env
     environment:
       <<: *agents-env
       SERVICE_ROLE: beat
