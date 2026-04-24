@@ -183,53 +183,36 @@ llm = ChatOpenAI(model="gpt-4o-mini")
 
 The agent code doesn't change — only `main.py`.
 
-## Memory setup (pgvector + RabbitMQ)
+## Running with docker (recommended)
 
-### Prerequisites
-
-RabbitMQ broker (for Celery):
+All infra (Postgres + pgvector, RabbitMQ) and all agent services (FastAPI, Celery worker, Celery beat) run under docker compose. See the repo root README for the full quickstart. Short form:
 
 ```bash
-docker run -d --name pisang-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+# from the repo root
+./scripts/dev.sh up          # first run: builds + seeds
+./scripts/dev.sh logs        # tail api + worker
+./scripts/dev.sh psql        # shell into the DB
+./scripts/dev.sh reset       # wipe volumes + re-seed
 ```
 
-Management UI at http://localhost:15672 (guest/guest).
+## Running on host (without docker)
 
-Enable pgvector extension on the Postgres database (one-time, requires superuser):
-
-```bash
-psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
-
-Verify:
-
-```bash
-psql "$DATABASE_URL" -c "\dx vector"
-```
-
-## Running with memory enabled
+Only needed if you prefer native processes (faster Python iteration at the cost of manual setup).
 
 Prereqs:
-- Postgres running, `pgvector` extension enabled
-- `DATABASE_URL` exported
-- RabbitMQ running on `localhost:5672` (see earlier memory-setup section)
-- `alembic upgrade head` run once
-- `python scripts/preload_embedder.py` run once (downloads bge-m3)
+- Postgres with `pgvector` extension (run `psql -c "CREATE EXTENSION vector"` once as superuser)
+- RabbitMQ on `localhost:5672`
+- `DATABASE_URL` exported in a `.env` file next to this README
 
 Three processes:
 
 ```bash
-# Terminal 1 — API
 uvicorn main:app --reload
-
-# Terminal 2 — Celery worker
-celery -A app.worker.celery_app worker --loglevel=info --concurrency=2 -Q memory
-
-# Terminal 3 — Celery beat (periodic summarizer)
+celery -A app.worker.celery_app worker -Q memory --loglevel=info --pool=threads --concurrency=2
 celery -A app.worker.celery_app beat --loglevel=info
 ```
 
-Smoke test:
+Smoke:
 
 ```bash
 python scripts/smoke_memory.py
