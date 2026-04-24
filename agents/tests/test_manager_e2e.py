@@ -1,0 +1,156 @@
+# agents/tests/test_manager_e2e.py
+"""Full graph integration test — all nodes wired, mocked LLMs, in-memory DB stub."""
+import pytest
+from langchain_core.messages import HumanMessage
+from app.schemas.agent_io import StructuredReply, ManagerVerdict, ManagerCritique, FactRef
+
+
+class _SequentialJualLLM:
+    """Returns different payloads on successive calls (v1 draft, v2 redraft)."""
+    def __init__(self, payloads):
+        self._payloads = list(payloads)
+        self._idx = 0
+    def bind_tools(self, tools): return self
+    def with_structured_output(self, schema):
+        outer = self
+        class _W:
+            async def ainvoke(self, h):
+                pl = outer._payloads[outer._idx]
+                outer._idx += 1
+                return StructuredReply.model_validate(pl)
+        return _W()
+    async def ainvoke(self, history):
+        import json
+        from langchain_core.messages import AIMessage
+        pl = self._payloads[self._idx]
+        self._idx += 1
+        return AIMessage(content=json.dumps(pl))
+
+
+class _SequentialManagerLLM:
+    def __init__(self, verdicts):
+        self._verdicts = list(verdicts)
+        self._idx = 0
+    def with_structured_output(self, schema):
+        outer = self
+        class _W:
+            async def ainvoke(self, prompt):
+                if schema.__name__ == "ManagerVerdict":
+                    v = outer._verdicts[outer._idx]
+                    outer._idx += 1
+                    return v
+                # Manager rewrite uses StructuredReply schema
+                return StructuredReply(
+                    reply="manager rewrite",
+                    facts_used=[FactRef(kind="product", id="p1")],
+                )
+        return _W()
+
+
+@pytest.mark.asyncio
+async def test_revise_then_pass_ends_auto_sent(monkeypatch):
+    import app.agents.manager as mgr
+
+    monkeypatch.setattr(mgr, "_load_shared_context_impl", lambda s: {
+        "business_context": "Business: Test",
+        "memory_block": "",
+        "valid_fact_ids": {"product:p1"},
+    })
+    writes = []
+    class _Session:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def add(self, r): writes.append(r)
+        def commit(self): pass
+    monkeypatch.setattr("app.agents.manager_terminal.SessionLocal", _Session)
+    monkeypatch.setattr("app.agents.manager_terminal._enqueue_memory_write", lambda *a, **k: None)
+
+    # v1 has unaddressed Q → gate 3 forces revise
+    v1 = {"reply": "RM10", "confidence": 0.8, "reasoning": "r",
+          "addressed_questions": [], "unaddressed_questions": ["stock?"],
+          "facts_used": [{"kind": "product", "id": "p1"}], "needs_human": False}
+    # v2 resolves unaddressed
+    v2 = {"reply": "RM10, 5 in stock", "confidence": 0.9, "reasoning": "r",
+          "addressed_questions": ["harga?", "stock?"], "unaddressed_questions": [],
+          "facts_used": [{"kind": "product", "id": "p1"}], "needs_human": False}
+
+    jual_llm = _SequentialJualLLM([v1, v2])
+    manager_llm = _SequentialManagerLLM([
+        # First evaluate (on v1): gate 3 fires BEFORE LLM — LLM is NOT called.
+        # Second evaluate (on v2): gates all pass, LLM is called → pass
+        ManagerVerdict(verdict="pass", reason="all addressed"),
+    ])
+
+    graph = mgr.build_manager_graph(jual_llm=jual_llm, manager_llm=manager_llm)
+    result = await graph.ainvoke({
+        "messages": [HumanMessage(content="harga ondeh? ada stock?")],
+        "business_id": "biz1",
+        "customer_id": "c1",
+        "customer_phone": "60123",
+        "revision_count": 0,
+        "iterations": [],
+    })
+    assert result["final_action"] == "auto_send"
+    row = writes[0]
+    assert row.status.value == "AUTO_SENT"
+    # Two iteration entries: jual_v1 + jual_v2
+    assert len(row.iterations) == 2
+    assert row.iterations[0]["stage"] == "jual_v1"
+    assert row.iterations[1]["stage"] == "jual_v2"
+
+
+@pytest.mark.asyncio
+async def test_rewrite_then_escalate_when_rewrite_hallucinates(monkeypatch):
+    import app.agents.manager as mgr
+    import app.agents.manager_rewrite as mrw
+
+    monkeypatch.setattr(mgr, "_load_shared_context_impl", lambda s: {
+        "business_context": "Business: Test",
+        "memory_block": "",
+        "valid_fact_ids": {"product:p1"},
+    })
+    writes = []
+    class _Session:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def add(self, r): writes.append(r)
+        def commit(self): pass
+    monkeypatch.setattr("app.agents.manager_terminal.SessionLocal", _Session)
+    monkeypatch.setattr("app.agents.manager_terminal._enqueue_memory_write", lambda *a, **k: None)
+
+    # v1 has a hallucinated fact → gate 2 says rewrite
+    v1 = {"reply": "RM5 for ghost", "confidence": 0.9, "reasoning": "r",
+          "addressed_questions": ["harga?"], "unaddressed_questions": [],
+          "facts_used": [{"kind": "product", "id": "ghost"}], "needs_human": False}
+
+    jual_llm = _SequentialJualLLM([v1])
+
+    # Manager rewrite ALSO hallucinates — gates_only_check must escalate
+    class _RewriteHallucinateLLM:
+        def __init__(self): self._call = 0
+        def with_structured_output(self, schema):
+            parent = self
+            class _W:
+                async def ainvoke(self, prompt):
+                    parent._call += 1
+                    if schema.__name__ == "ManagerVerdict":
+                        return ManagerVerdict(verdict="rewrite", reason="gate:ungrounded_fact:product:ghost")
+                    # Rewrite: still hallucinates
+                    return StructuredReply(
+                        reply="rewrite text",
+                        facts_used=[FactRef(kind="product", id="phantom")],
+                    )
+            return _W()
+
+    graph = mgr.build_manager_graph(jual_llm=jual_llm, manager_llm=_RewriteHallucinateLLM())
+    result = await graph.ainvoke({
+        "messages": [HumanMessage(content="harga?")],
+        "business_id": "biz1",
+        "customer_id": "c1",
+        "customer_phone": "60123",
+        "revision_count": 0,
+        "iterations": [],
+    })
+    assert result["final_action"] == "escalate"
+    row = writes[0]
+    assert row.status.value == "PENDING"

@@ -1,5 +1,7 @@
 import logging
-from fastapi import APIRouter, HTTPException
+import os
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from app.db import SessionLocal, AgentAction, AgentActionStatus
@@ -11,21 +13,55 @@ router = APIRouter(prefix="/agent", tags=["support"])
 
 _log = logging.getLogger(__name__)
 
+# KNOWN LIMITATION: _PENDING_MEMORY_TASKS is process-local and lost on
+# restart or with multiple workers. Acceptable for hackathon / single-worker
+# dev. Production should persist embedTaskId on AgentAction or use Redis
+# with a short TTL — see plan follow-up items.
+_PENDING_MEMORY_TASKS: dict[str, Optional[str]] = {}
 
-def _enqueue_past_action(action_id: str):
-    import os
+UNSEND_WINDOW_SECONDS = 10
+
+
+def _get_past_action_task():
+    """Indirection so tests can monkeypatch without importing Celery."""
+    from app.worker.tasks import embed_past_action
+    return embed_past_action
+
+
+def _enqueue_past_action_deferred(action_id: str, countdown_s: int = 10) -> Optional[str]:
     if os.environ.get("MEMORY_ENABLED", "true").lower() != "true":
+        return None
+    try:
+        task = _get_past_action_task()
+        result = task.apply_async(kwargs={"action_id": action_id}, countdown=countdown_s)
+        return result.id
+    except Exception as e:
+        _log.warning("deferred past-action enqueue failed: %s", e)
+        return None
+
+
+def _revoke_memory_task(action_id: str):
+    task_id = _PENDING_MEMORY_TASKS.pop(action_id, None)
+    if not task_id:
         return
     try:
-        from app.worker.tasks import embed_past_action
-        embed_past_action.delay(action_id)
+        from app.worker.celery_app import celery_app
+        celery_app.control.revoke(task_id, terminate=False)
     except Exception as e:
-        _log.warning("enqueue past action failed: %s", e)
+        _log.warning("revoke memory task failed: %s", e)
 
 
 async def _support_graph_ainvoke(state):
     """Indirection so tests can monkeypatch."""
     raise NotImplementedError("assigned in make_support_router")
+
+
+def _load_escalation_summary(action_id: str) -> Optional[str]:
+    with SessionLocal() as session:
+        action = session.query(AgentAction).filter(AgentAction.id == action_id).first()
+        if not action:
+            return None
+        return action.reasoning
 
 
 class SupportChatRequest(BaseModel):
@@ -40,6 +76,8 @@ class SupportChatResponse(BaseModel):
     reply: Optional[str] = None
     action_id: Optional[str] = None
     confidence: Optional[float] = None
+    best_draft: Optional[str] = None
+    escalation_summary: Optional[str] = None
 
 
 class EditRequest(BaseModel):
@@ -56,6 +94,7 @@ class AgentActionOut(BaseModel):
     reasoning: str
     status: str
     createdAt: str
+    approvedAt: Optional[str] = None
 
 
 def make_support_router(support_graph):
@@ -74,29 +113,47 @@ def make_support_router(support_graph):
                 "business_id": req.business_id,
                 "customer_id": req.customer_id,
                 "customer_phone": normalize_phone(req.customer_phone) if req.customer_phone else "",
-                "memory_block": "",
-                "business_context": "",
-                "draft_reply": "",
-                "confidence": 0.0,
-                "reasoning": "",
-                "action": "queue_approval",
-                "action_id": "",
+                "revision_count": 0,
+                "iterations": [],
             })
-            if result["action"] == "auto_send":
-                return SupportChatResponse(
-                    status="sent",
-                    reply=result["draft_reply"],
-                    action_id=result["action_id"],
-                    confidence=result["confidence"],
-                )
-            else:
+
+            # Manager graph shape
+            if "final_action" in result:
+                action_id = result.get("action_id")
+                if result["final_action"] == "auto_send":
+                    # Re-read the finalReply from DB for consistency, avoid state bleed
+                    with SessionLocal() as session:
+                        row = session.query(AgentAction).filter_by(id=action_id).first()
+                        reply = row.finalReply if row else None
+                        confidence = row.confidence if row else 0.0
+                    return SupportChatResponse(
+                        status="sent",
+                        reply=reply,
+                        action_id=action_id,
+                        confidence=confidence,
+                    )
+                # escalate
                 return SupportChatResponse(
                     status="pending_approval",
-                    action_id=result["action_id"],
-                    confidence=result["confidence"],
+                    action_id=action_id,
+                    best_draft=result.get("best_draft"),
+                    escalation_summary=_load_escalation_summary(action_id),
                 )
+
+            # Legacy support_graph path (MANAGER_ENABLED=false)
+            action_id = result.get("action_id", "")
+            confidence = result.get("confidence", 0.0)
+            draft = result.get("draft_reply", "")
+            should_auto = confidence >= 0.8
+            if should_auto:
+                return SupportChatResponse(status="sent", reply=draft, action_id=action_id, confidence=confidence)
+            return SupportChatResponse(status="pending_approval", action_id=action_id, confidence=confidence)
+
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            _log.exception("support_chat failed")
+            raise HTTPException(status_code=500, detail="Agent processing failed")
 
     @router.get("/actions", response_model=list[AgentActionOut])
     def list_actions(business_id: str, status: Optional[str] = None):
@@ -120,48 +177,31 @@ def make_support_router(support_graph):
                     reasoning=a.reasoning,
                     status=a.status.value,
                     createdAt=a.createdAt.isoformat(),
+                    approvedAt=a.approvedAt.isoformat() if a.approvedAt else None,
                 )
                 for a in actions
             ]
 
     @router.post("/actions/{action_id}/approve", response_model=AgentActionOut)
-    def approve_action(action_id: str):
+    def approve_action(action_id: str, body: Optional[EditRequest] = None):
         with SessionLocal() as session:
             action = session.query(AgentAction).filter(AgentAction.id == action_id).first()
             if not action:
                 raise HTTPException(status_code=404, detail="Action not found")
             if action.status != AgentActionStatus.PENDING:
                 raise HTTPException(status_code=400, detail=f"Action is {action.status.value}, not PENDING")
-            action.status = AgentActionStatus.APPROVED
-            action.finalReply = action.draftReply
-            session.commit()
-            session.refresh(action)
-            _enqueue_past_action(action.id)
-            return AgentActionOut(
-                id=action.id,
-                businessId=action.businessId,
-                customerMsg=action.customerMsg,
-                draftReply=action.draftReply,
-                finalReply=action.finalReply,
-                confidence=action.confidence,
-                reasoning=action.reasoning,
-                status=action.status.value,
-                createdAt=action.createdAt.isoformat(),
-            )
 
-    @router.post("/actions/{action_id}/edit", response_model=AgentActionOut)
-    def edit_action(action_id: str, body: EditRequest):
-        with SessionLocal() as session:
-            action = session.query(AgentAction).filter(AgentAction.id == action_id).first()
-            if not action:
-                raise HTTPException(status_code=404, detail="Action not found")
-            if action.status != AgentActionStatus.PENDING:
-                raise HTTPException(status_code=400, detail=f"Action is {action.status.value}, not PENDING")
+            final_text = body.reply if body and body.reply else action.draftReply
             action.status = AgentActionStatus.APPROVED
-            action.finalReply = body.reply
+            action.approvedAt = datetime.now(timezone.utc)
+            action.finalReply = final_text
             session.commit()
             session.refresh(action)
-            _enqueue_past_action(action.id)
+
+            task_id = _enqueue_past_action_deferred(action.id, countdown_s=10)
+            # Store task id so unsend can revoke it before it fires.
+            _PENDING_MEMORY_TASKS[action.id] = task_id
+
             return AgentActionOut(
                 id=action.id,
                 businessId=action.businessId,
@@ -172,6 +212,7 @@ def make_support_router(support_graph):
                 reasoning=action.reasoning,
                 status=action.status.value,
                 createdAt=action.createdAt.isoformat(),
+                approvedAt=action.approvedAt.isoformat() if action.approvedAt else None,
             )
 
     @router.post("/actions/{action_id}/reject", response_model=AgentActionOut)
@@ -195,6 +236,45 @@ def make_support_router(support_graph):
                 reasoning=action.reasoning,
                 status=action.status.value,
                 createdAt=action.createdAt.isoformat(),
+                approvedAt=action.approvedAt.isoformat() if action.approvedAt else None,
             )
+
+    @router.get("/actions/{action_id}/iterations")
+    def get_iterations(action_id: str, response: Response):
+        response.headers["Cache-Control"] = "private, max-age=3600, immutable"
+        with SessionLocal() as session:
+            action = session.query(AgentAction).filter(AgentAction.id == action_id).first()
+            if not action:
+                raise HTTPException(status_code=404, detail="Action not found")
+            return {"iterations": action.iterations or []}
+
+    @router.post("/actions/{action_id}/unsend", response_model=AgentActionOut)
+    def unsend_action(action_id: str):
+        with SessionLocal() as session:
+            action = session.query(AgentAction).filter(AgentAction.id == action_id).first()
+            if not action:
+                raise HTTPException(status_code=404, detail="Action not found")
+            if action.status != AgentActionStatus.APPROVED:
+                raise HTTPException(status_code=400, detail="Only APPROVED actions can be unsent")
+            if action.approvedAt is None:
+                raise HTTPException(status_code=400, detail="Action was not approved via the undo-enabled path")
+            # action.approvedAt may be naive UTC; compare as UTC
+            approved = action.approvedAt
+            if approved.tzinfo is None:
+                approved = approved.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - approved > timedelta(seconds=UNSEND_WINDOW_SECONDS):
+                raise HTTPException(status_code=409, detail="Unsend window expired")
+            action.status = AgentActionStatus.PENDING
+            action.finalReply = None
+            session.commit()
+            session.refresh(action)
+        _revoke_memory_task(action_id)
+        return AgentActionOut(
+            id=action.id, businessId=action.businessId, customerMsg=action.customerMsg,
+            draftReply=action.draftReply, finalReply=action.finalReply,
+            confidence=action.confidence, reasoning=action.reasoning,
+            status=action.status.value, createdAt=action.createdAt.isoformat(),
+            approvedAt=action.approvedAt.isoformat() if action.approvedAt else None,
+        )
 
     return router

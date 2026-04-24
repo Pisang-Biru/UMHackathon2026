@@ -157,6 +157,7 @@ model Order {
   status          OrderStatus @default(PENDING_PAYMENT)
   buyerName       String?
   buyerContact    String?
+  paymentUrl      String?
   paidAt          DateTime?
   acknowledgedAt  DateTime?
   createdAt       DateTime    @default(now())

@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { prisma } from '#/db'
 import { auth } from '#/lib/auth'
+import { enqueueProductReindex } from '#/lib/agents-reindex'
 
 async function requireSession() {
   const { getRequest } = await import('@tanstack/react-start/server')
@@ -50,25 +51,26 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
     const d = data as Record<string, unknown>
     if (typeof d.orderId !== 'string') throw new Error('orderId required')
     if (typeof d.buyerName !== 'string' || d.buyerName.trim().length < 1) throw new Error('buyerName required')
-    if (typeof d.buyerContact !== 'string' || d.buyerContact.trim().length < 1) throw new Error('buyerContact required')
-    return { orderId: d.orderId, buyerName: d.buyerName.trim(), buyerContact: d.buyerContact.trim() }
+    return { orderId: d.orderId, buyerName: d.buyerName.trim() }
   })
   .handler(async ({ data }) => {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id: data.orderId } })
       if (!order) throw new Error('Order not found')
       if (order.status !== 'PENDING_PAYMENT') throw new Error(`Order is ${order.status}`)
+
       const updated = await tx.order.update({
         where: { id: data.orderId },
         data: {
           status: 'PAID',
           paidAt: new Date(),
           buyerName: data.buyerName,
-          buyerContact: data.buyerContact,
         },
       })
-      return serializeOrder(updated)
+      return { updated, productId: order.productId }
     })
+    enqueueProductReindex(result.productId)
+    return serializeOrder(result.updated)
   })
 
 export const acknowledgeOrder = createServerFn({ method: 'POST' })

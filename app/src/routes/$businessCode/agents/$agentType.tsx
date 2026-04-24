@@ -2,7 +2,7 @@ import React from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { fetchBusinesses } from '#/lib/business-server-fns'
 import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget, KNOWN_AGENT_TYPES } from '#/lib/agent-server-fns'
-import { approveAction, editAction, rejectAction } from '#/lib/inbox-server-fns'
+import { approveAction, rejectAction } from '#/lib/inbox-server-fns'
 import { fetchAgentSales } from '#/lib/order-server-fns'
 import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
@@ -54,6 +54,8 @@ function normalize(raw: any): InboxAction {
     createdAt: new Date(raw.createdAt),
     updatedAt: new Date(raw.updatedAt),
     viewedAt: raw.viewedAt ? new Date(raw.viewedAt) : null,
+    bestDraft: raw.bestDraft ?? null,
+    escalationSummary: raw.escalationSummary ?? null,
   }
 }
 
@@ -131,13 +133,8 @@ function AgentPage() {
     if (!runsLoaded) loadRuns(runsFilter)
   }
 
-  async function handleApprove(action: InboxAction) {
-    const updated = await approveAction({ data: { actionId: action.id } })
-    const u = normalize(updated)
-    setRunsRows((prev) => prev.map((r) => (r.id === u.id ? u : r)))
-  }
-  async function handleEdit(action: InboxAction, reply: string) {
-    const updated = await editAction({ data: { actionId: action.id, reply } })
+  async function handleApprove(action: InboxAction, reply: string) {
+    const updated = await approveAction({ data: { actionId: action.id, reply } })
     const u = normalize(updated)
     setRunsRows((prev) => prev.map((r) => (r.id === u.id ? u : r)))
   }
@@ -182,7 +179,6 @@ function AgentPage() {
             onSelect={(a) => selectRun(a.id)}
             onLoadMore={() => loadRuns(runsFilter, runsCursor)}
             onApprove={handleApprove}
-            onEdit={handleEdit}
             onReject={handleReject}
           />
         )}

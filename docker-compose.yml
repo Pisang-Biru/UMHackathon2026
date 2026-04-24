@@ -9,7 +9,7 @@ x-agents-env: &agents-env
   MEMORY_SUMMARY_BATCH: "20"
   MEMORY_SUMMARY_INTERVAL_SEC: "3600"
   MEMORY_DISPLAY_TZ: Asia/Kuala_Lumpur
-  APP_URL: http://host.docker.internal:3000
+  APP_URL: http://localhost:3000
   POSTGRES_HOST: postgres
   POSTGRES_USER: postgres
   RABBITMQ_HOST: rabbitmq

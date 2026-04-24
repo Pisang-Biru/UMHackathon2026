@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { prisma } from '#/db'
 import { auth } from '#/lib/auth'
+import { enqueueProductReindex } from '#/lib/agents-reindex'
 
 async function requireSession() {
   const { getRequest } = await import('@tanstack/react-start/server')
@@ -16,13 +17,6 @@ async function requireBusinessOwner(businessId: string, userId: string) {
   })
   if (!business) throw new Error('Business not found or access denied')
   return business
-}
-
-function enqueueProductReindex(productId: string) {
-  // fire-and-forget reindex to agent memory service
-  const agentsUrl = process.env.AGENTS_URL ?? 'http://localhost:8000'
-  fetch(`${agentsUrl}/memory/product/${productId}/reindex`, { method: 'POST' })
-    .catch((err) => console.warn('reindex enqueue failed', err))
 }
 
 export const fetchProducts = createServerFn({ method: 'GET' })
