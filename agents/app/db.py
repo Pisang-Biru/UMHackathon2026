@@ -72,6 +72,7 @@ class Order(Base):
     status = Column(SAEnum(OrderStatus, name="OrderStatus"), nullable=False, default=OrderStatus.PENDING_PAYMENT)
     buyerName = Column(String, nullable=True)
     buyerContact = Column(String, nullable=True)
+    paymentUrl = Column(String, nullable=True)
     paidAt = Column(DateTime, nullable=True)
     acknowledgedAt = Column(DateTime, nullable=True)
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
