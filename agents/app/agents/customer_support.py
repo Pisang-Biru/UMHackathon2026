@@ -306,10 +306,6 @@ def _make_search_memory_tool(business_id: str):
 
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
-_NL_REPLY_RE = re.compile(
-    r"REPLY:\s*(?P<reply>.*?)\n\s*CONFIDENCE:\s*(?P<conf>[0-9.]+)\s*\n\s*REASONING:\s*(?P<reason>.*?)\s*$",
-    re.DOTALL | re.IGNORECASE,
-)
 
 
 def _try_parse_json_reply(text: str):
@@ -337,30 +333,6 @@ def _try_parse_json_reply(text: str):
     except Exception:
         return None
 
-
-def _try_parse_nl_reply(text: str):
-    """Parse a natural-language labeled response as a last-resort fallback.
-
-    Expected format:
-        REPLY: <reply text, may span multiple lines>
-        CONFIDENCE: <float>
-        REASONING: <one sentence>
-
-    Returns a StructuredReply on success, None on failure.
-    """
-    if not text or not text.strip():
-        return None
-    match = _NL_REPLY_RE.search(text.strip())
-    if not match:
-        return None
-    try:
-        return StructuredReply.model_validate({
-            "reply": match.group("reply").strip(),
-            "confidence": float(match.group("conf")),
-            "reasoning": match.group("reason").strip(),
-        })
-    except Exception:
-        return None
 
 
 def build_customer_support_agent(llm):
@@ -423,23 +395,19 @@ def build_customer_support_agent(llm):
         direct = _try_parse_json_reply(last_text)
         if direct is not None:
             return {
+                "structured_reply": direct,
                 "draft_reply": direct.reply,
                 "confidence": float(direct.confidence),
                 "reasoning": direct.reasoning,
             }
 
         json_retry_instruction = SystemMessage(content=(
-            "Produce the final reply to the buyer as a single JSON object matching this schema:\n"
-            '{"reply": "<text, include payment URL verbatim when a link was generated>", '
-            '"confidence": <float 0.0-1.0>, "reasoning": "<one sentence>"}\n'
+            "Produce the final reply as a single JSON object matching this schema:\n"
+            '{"reply": "<text>", "confidence": <float>, "reasoning": "<sentence>", '
+            '"addressed_questions": [...], "unaddressed_questions": [...], '
+            '"facts_used": [{"kind":"product|order|kb|memory","id":"<id>"}], '
+            '"needs_human": <bool>}\n'
             "Output ONLY the JSON object. No markdown fences, no prose before or after."
-        ))
-        nl_fallback_instruction = SystemMessage(content=(
-            "The previous JSON response could not be parsed. Do NOT use JSON. "
-            "Respond using this exact plain-text format, no markdown fences, no extra prose:\n"
-            "REPLY: <your reply to the buyer, include payment URL verbatim when a link was generated>\n"
-            "CONFIDENCE: <float between 0.0 and 1.0>\n"
-            "REASONING: <one sentence explaining your confidence>"
         ))
         try:
             response = await llm.ainvoke(history + [json_retry_instruction])
@@ -447,32 +415,27 @@ def build_customer_support_agent(llm):
             retry_parsed = _try_parse_json_reply(retry_text)
             if retry_parsed is not None:
                 return {
+                    "structured_reply": retry_parsed,
                     "draft_reply": retry_parsed.reply,
                     "confidence": float(retry_parsed.confidence),
                     "reasoning": retry_parsed.reasoning,
                 }
-
-            _log.warning("JSON retry failed, trying NL fallback")
-            history.append(response)
-            nl_response = await llm.ainvoke(history + [nl_fallback_instruction])
-            nl_text = nl_response.content if isinstance(nl_response.content, str) else ""
-            nl_parsed = _try_parse_nl_reply(nl_text)
-            if nl_parsed is not None:
-                return {
-                    "draft_reply": nl_parsed.reply,
-                    "confidence": float(nl_parsed.confidence),
-                    "reasoning": nl_parsed.reasoning,
-                }
-            raise ValueError(
-                f"JSON retry and NL fallback both failed. "
-                f"json_retry={retry_text[:120]!r} nl={nl_text[:120]!r}"
-            )
         except Exception as e:
-            return {
-                "draft_reply": last_text,
-                "confidence": 0.5,
-                "reasoning": f"Structured output failed: {e}",
-            }
+            _log.warning("JSON retry raised: %s", e)
+
+        _log.warning("JSON parse failed twice; synthesizing needs_human draft")
+        fallback = StructuredReply(
+            reply="Sorry, I need someone to look at this properly. A human will reply shortly.",
+            confidence=0.0,
+            reasoning="JSON parsing failed twice",
+            needs_human=True,
+        )
+        return {
+            "structured_reply": fallback,
+            "draft_reply": fallback.reply,
+            "confidence": 0.0,
+            "reasoning": fallback.reasoning,
+        }
 
     async def redraft_reply(state: SupportAgentState) -> dict:
         prev = state.get("previous_draft")
