@@ -1,10 +1,10 @@
-import json
 import os
 from cuid2 import Cuid as _Cuid
 generate_cuid = _Cuid().generate
 from decimal import Decimal
 from typing import Annotated, Literal
 from typing_extensions import TypedDict
+from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
@@ -18,6 +18,12 @@ from app.db import (
     Order,
     OrderStatus,
 )
+
+
+class StructuredReply(BaseModel):
+    reply: str = Field(description="The reply to the buyer. If a payment link was generated, include the URL verbatim.")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in this reply")
+    reasoning: str = Field(description="One sentence explaining your confidence")
 
 
 class SupportAgentState(TypedDict):
@@ -156,26 +162,27 @@ def build_customer_support_agent(llm):
                 result = tool_fn.invoke(call["args"])
                 history.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
 
-        final = history[-1]
-        content = final.content.strip() if isinstance(final.content, str) else ""
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-            content = content.strip()
-
+        structured_llm = llm.with_structured_output(StructuredReply)
+        final_instruction = SystemMessage(content=(
+            "Now produce the final reply to the buyer as JSON matching the schema. "
+            "If a payment link was created above, include the URL verbatim in the reply field."
+        ))
         try:
-            parsed = json.loads(content)
+            parsed: StructuredReply = await structured_llm.ainvoke(history + [final_instruction])
             return {
-                "draft_reply": parsed["reply"],
-                "confidence": float(parsed["confidence"]),
-                "reasoning": parsed.get("reasoning", ""),
+                "draft_reply": parsed.reply,
+                "confidence": float(parsed.confidence),
+                "reasoning": parsed.reasoning,
             }
-        except (json.JSONDecodeError, KeyError):
+        except Exception as e:
+            fallback_text = ""
+            last = history[-1]
+            if isinstance(last.content, str):
+                fallback_text = last.content
             return {
-                "draft_reply": content,
+                "draft_reply": fallback_text,
                 "confidence": 0.5,
-                "reasoning": "Failed to parse structured output",
+                "reasoning": f"Structured output failed: {e}",
             }
 
     async def route_decision(state: SupportAgentState) -> dict:
