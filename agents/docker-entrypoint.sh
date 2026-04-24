@@ -19,15 +19,15 @@ wait_for_rabbit() {
 case "$SERVICE_ROLE" in
   init)
     wait_for_postgres
+    echo "[init] prisma migrate deploy"
+    cd /app-ts && npx --yes prisma@latest migrate deploy
     echo "[init] alembic upgrade head"
     cd /app && alembic upgrade head
-    echo "[init] prisma migrate deploy"
-    cd /prisma && npx --yes prisma@latest migrate deploy --schema=/prisma/schema.prisma
     echo "[init] preload bge-m3"
     cd /app && python scripts/preload_embedder.py
     if [ "${SEED:-false}" = "true" ]; then
       echo "[init] seed"
-      cd /app && python scripts/seed_dev.py
+      cd /app && PYTHONPATH=/app python scripts/seed_dev.py
     fi
     echo "[init] done"
     ;;

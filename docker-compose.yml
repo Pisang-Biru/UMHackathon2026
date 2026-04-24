@@ -62,7 +62,7 @@ services:
       SEED: ${SEED:-true}
     volumes:
       - ./agents:/app
-      - ./app/prisma:/prisma:ro
+      - ./app:/app-ts:ro
       - hf-cache:/root/.cache/huggingface
     depends_on:
       postgres:
