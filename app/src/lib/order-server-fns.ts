@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { prisma } from '#/db'
 import { auth } from '#/lib/auth'
+import { enqueueProductReindex } from '#/lib/agents-reindex'
 
 async function requireSession() {
   const { getRequest } = await import('@tanstack/react-start/server')
@@ -54,10 +55,17 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
     return { orderId: d.orderId, buyerName: d.buyerName.trim(), buyerContact: d.buyerContact.trim() }
   })
   .handler(async ({ data }) => {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id: data.orderId } })
       if (!order) throw new Error('Order not found')
       if (order.status !== 'PENDING_PAYMENT') throw new Error(`Order is ${order.status}`)
+
+      const dec = await tx.product.updateMany({
+        where: { id: order.productId, stock: { gte: order.qty } },
+        data: { stock: { decrement: order.qty } },
+      })
+      if (dec.count === 0) throw new Error('Out of stock')
+
       const updated = await tx.order.update({
         where: { id: data.orderId },
         data: {
@@ -67,8 +75,10 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
           buyerContact: data.buyerContact,
         },
       })
-      return serializeOrder(updated)
+      return { updated, productId: order.productId }
     })
+    enqueueProductReindex(result.productId)
+    return serializeOrder(result.updated)
   })
 
 export const acknowledgeOrder = createServerFn({ method: 'POST' })
