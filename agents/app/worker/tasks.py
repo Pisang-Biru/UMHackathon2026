@@ -30,3 +30,14 @@ def embed_product(self, product_id: str):
             session.commit()
     except Exception as e:
         raise self.retry(exc=e)
+
+
+@celery.task(bind=True, max_retries=3, default_retry_delay=30)
+def embed_kb_chunk(self, business_id: str, source_id: str, chunk_index: int, content: str):
+    try:
+        vec = embed([content])[0]
+        with SessionLocal() as session:
+            repo.insert_kb_chunk(session, business_id, source_id, chunk_index, content, vec)
+            session.commit()
+    except Exception as e:
+        raise self.retry(exc=e)

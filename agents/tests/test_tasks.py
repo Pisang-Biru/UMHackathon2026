@@ -51,3 +51,21 @@ def test_embed_product_upserts(session, engine, monkeypatch):
     rows = session.query(models.MemoryProductEmbedding).filter_by(productId="p1").all()
     assert len(rows) == 1
     assert "Sambal" in rows[0].content
+
+
+def test_embed_kb_chunk_writes_row(session, engine, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    TestSession = sessionmaker(bind=engine)
+    monkeypatch.setattr(tasks, "SessionLocal", TestSession)
+    monkeypatch.setattr(tasks, "embed", lambda texts: [[0.3] * 1024])
+
+    tasks.embed_kb_chunk.delay(
+        business_id="biz1",
+        source_id="docA",
+        chunk_index=0,
+        content="We ship KL same day",
+    )
+
+    rows = session.query(models.MemoryKbChunk).filter_by(sourceId="docA").all()
+    assert len(rows) == 1
+    assert rows[0].content == "We ship KL same day"
