@@ -87,6 +87,7 @@ model Business {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   products     Product[]
   agentActions AgentAction[]
+  orders       Order[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -101,6 +102,7 @@ model Product {
   description String?
   businessId  String
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  orders      Order[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -134,4 +136,32 @@ model AgentAction {
   updatedAt   DateTime          @updatedAt
 
   @@map("agent_action")
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  CANCELLED
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  businessId      String
+  business        Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product     @relation(fields: [productId], references: [id])
+  agentType       String?
+  qty             Int
+  unitPrice       Decimal     @db.Decimal(10, 2)
+  totalAmount     Decimal     @db.Decimal(10, 2)
+  status          OrderStatus @default(PENDING_PAYMENT)
+  buyerName       String?
+  buyerContact    String?
+  paidAt          DateTime?
+  acknowledgedAt  DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("order")
+  @@index([businessId, status])
 }
