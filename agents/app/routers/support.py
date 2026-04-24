@@ -1,16 +1,37 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from app.db import SessionLocal, AgentAction, AgentActionStatus
+from app.memory.phone import normalize_phone
 from typing import Optional
 
 
 router = APIRouter(prefix="/agent", tags=["support"])
 
+_log = logging.getLogger(__name__)
+
+
+def _enqueue_past_action(action_id: str):
+    import os
+    if os.environ.get("MEMORY_ENABLED", "true").lower() != "true":
+        return
+    try:
+        from app.worker.tasks import embed_past_action
+        embed_past_action.delay(action_id)
+    except Exception as e:
+        _log.warning("enqueue past action failed: %s", e)
+
+
+async def _support_graph_ainvoke(state):
+    """Indirection so tests can monkeypatch."""
+    raise NotImplementedError("assigned in make_support_router")
+
 
 class SupportChatRequest(BaseModel):
     business_id: str
     customer_id: str
+    customer_phone: Optional[str] = None
     message: str
 
 
@@ -38,13 +59,22 @@ class AgentActionOut(BaseModel):
 
 
 def make_support_router(support_graph):
+    global _support_graph_ainvoke
+
+    async def _real_invoke(state):
+        return await support_graph.ainvoke(state)
+
+    _support_graph_ainvoke = _real_invoke
+
     @router.post("/support/chat", response_model=SupportChatResponse)
     async def support_chat(req: SupportChatRequest):
         try:
-            result = await support_graph.ainvoke({
+            result = await _support_graph_ainvoke({
                 "messages": [HumanMessage(content=req.message)],
                 "business_id": req.business_id,
                 "customer_id": req.customer_id,
+                "customer_phone": normalize_phone(req.customer_phone) if req.customer_phone else "",
+                "memory_block": "",
                 "business_context": "",
                 "draft_reply": "",
                 "confidence": 0.0,
@@ -106,6 +136,7 @@ def make_support_router(support_graph):
             action.finalReply = action.draftReply
             session.commit()
             session.refresh(action)
+            _enqueue_past_action(action.id)
             return AgentActionOut(
                 id=action.id,
                 businessId=action.businessId,
@@ -130,6 +161,7 @@ def make_support_router(support_graph):
             action.finalReply = body.reply
             session.commit()
             session.refresh(action)
+            _enqueue_past_action(action.id)
             return AgentActionOut(
                 id=action.id,
                 businessId=action.businessId,
