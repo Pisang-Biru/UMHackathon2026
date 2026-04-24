@@ -114,3 +114,71 @@ def recent_turns(session: Session, business_id: str, customer_phone: str,
         .limit(limit)
     )
     return list(session.execute(q).scalars())
+
+
+# cosine distance via pgvector's <=> operator. similarity = 1 - distance.
+# pgvector.sqlalchemy exposes .cosine_distance() on Vector columns.
+
+def _run_search(session, model, embedding, k, min_sim, extra_filters):
+    dist = model.embedding.cosine_distance(embedding)
+    q = select(model, (1 - dist).label("similarity"))
+    for f in extra_filters:
+        q = q.where(f)
+    q = q.order_by(dist).limit(k)
+    rows = session.execute(q).all()
+    results = []
+    for row in rows:
+        obj = row[0]
+        sim = float(row[1])
+        if sim < min_sim:
+            continue
+        obj.similarity = sim  # attach for callers
+        results.append(obj)
+    return results
+
+
+def search_kb(session, business_id, embedding, k=5, min_sim=0.6):
+    return _run_search(
+        session,
+        models.MemoryKbChunk,
+        embedding,
+        k,
+        min_sim,
+        [models.MemoryKbChunk.businessId == business_id],
+    )
+
+
+def search_products(session, business_id, embedding, k=5, min_sim=0.5):
+    return _run_search(
+        session,
+        models.MemoryProductEmbedding,
+        embedding,
+        k,
+        min_sim,
+        [models.MemoryProductEmbedding.businessId == business_id],
+    )
+
+
+def search_past_actions(session, business_id, embedding, k=3, min_sim=0.7):
+    return _run_search(
+        session,
+        models.MemoryPastAction,
+        embedding,
+        k,
+        min_sim,
+        [models.MemoryPastAction.businessId == business_id],
+    )
+
+
+def search_summaries(session, business_id, customer_phone, embedding, k=3, min_sim=0.5):
+    return _run_search(
+        session,
+        models.MemoryConversationSummary,
+        embedding,
+        k,
+        min_sim,
+        [
+            models.MemoryConversationSummary.businessId == business_id,
+            models.MemoryConversationSummary.customerPhone == customer_phone,
+        ],
+    )

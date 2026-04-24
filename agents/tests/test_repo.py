@@ -56,3 +56,53 @@ def test_insert_summary(session):
     session.commit()
     rows = session.query(models.MemoryConversationSummary).all()
     assert len(rows) == 1
+
+
+def test_search_kb_ranks_closer_text_first(session):
+    v1 = [1.0] + [0.0] * 1023
+    v2 = [0.0, 1.0] + [0.0] * 1022
+    repo.insert_kb_chunk(session, "biz2", "src", 0, "shipping KL", v1)
+    repo.insert_kb_chunk(session, "biz2", "src", 1, "refund policy", v2)
+    session.commit()
+    hits = repo.search_kb(session, "biz2", v1, k=2, min_sim=0.0)
+    assert hits[0].content == "shipping KL"
+
+
+def test_search_threshold_filters_noise(session):
+    v1 = [1.0] + [0.0] * 1023
+    v2 = [0.0, 1.0] + [0.0] * 1022
+    repo.insert_kb_chunk(session, "biz3", "src", 0, "unrelated", v2)
+    session.commit()
+    hits = repo.search_kb(session, "biz3", v1, k=5, min_sim=0.5)
+    assert hits == []
+
+
+def test_search_isolates_by_business(session):
+    v1 = [1.0] + [0.0] * 1023
+    repo.insert_kb_chunk(session, "bizA", "src", 0, "A doc", v1)
+    repo.insert_kb_chunk(session, "bizB", "src", 0, "B doc", v1)
+    session.commit()
+    hits = repo.search_kb(session, "bizA", v1, k=5, min_sim=0.0)
+    assert all(h.businessId == "bizA" for h in hits)
+
+
+def test_search_summaries_filters_by_phone(session):
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    v = [1.0] + [0.0] * 1023
+    repo.insert_summary(session, "biz4", "+60111", "mine", now, now, v)
+    repo.insert_summary(session, "biz4", "+60222", "other", now, now, v)
+    session.commit()
+    hits = repo.search_summaries(session, "biz4", "+60111", v, k=5, min_sim=0.0)
+    assert all(h.customerPhone == "+60111" for h in hits)
+
+
+def test_search_products_and_past_actions_work(session):
+    v = [1.0] + [0.0] * 1023
+    repo.upsert_product_embedding(session, "p2", "biz5", "sambal", v)
+    repo.upsert_past_action(session, "a2", "biz5", "refund?", "yes", v)
+    session.commit()
+    p_hits = repo.search_products(session, "biz5", v, k=5, min_sim=0.0)
+    a_hits = repo.search_past_actions(session, "biz5", v, k=5, min_sim=0.0)
+    assert len(p_hits) == 1 and p_hits[0].content == "sambal"
+    assert len(a_hits) == 1 and a_hits[0].customerMsg == "refund?"
