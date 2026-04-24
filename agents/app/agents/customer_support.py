@@ -31,6 +31,8 @@ class SupportAgentState(TypedDict):
     business_context: str
     business_id: str
     customer_id: str
+    customer_phone: str
+    memory_block: str
     draft_reply: str
     confidence: float
     reasoning: str
