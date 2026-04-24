@@ -55,9 +55,16 @@ def test_approve_enqueues_past_action(monkeypatch):
     from datetime import datetime, timezone
     from app.db import SessionLocal, AgentAction, AgentActionStatus
     import cuid2
+
+    # Patch _get_past_action_task to capture apply_async calls (deferred enqueue)
     calls = []
-    monkeypatch.setattr(support_router, "_enqueue_past_action",
-                         lambda action_id: calls.append(action_id))
+    class _FakeTask:
+        def apply_async(self, kwargs=None, countdown=None):
+            calls.append(kwargs.get("action_id") if kwargs else None)
+            class _Result:
+                id = "task-stub"
+            return _Result()
+    monkeypatch.setattr(support_router, "_get_past_action_task", lambda: _FakeTask())
 
     aid = cuid2.Cuid().generate()
     with SessionLocal() as s:
