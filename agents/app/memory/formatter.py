@@ -1,3 +1,20 @@
+import os
+from datetime import timezone
+from zoneinfo import ZoneInfo
+
+
+_DISPLAY_TZ = ZoneInfo(os.environ.get("MEMORY_DISPLAY_TZ", "Asia/Kuala_Lumpur"))
+
+
+def _to_local(dt):
+    if dt is None:
+        return None
+    # turnAt is stored naive (DateTime without tz) but values are UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_DISPLAY_TZ)
+
+
 def _mask_phone(phone: str) -> str:
     if not phone:
         return ""
@@ -13,10 +30,9 @@ def memory_block(phone, recent_turns, summaries) -> str:
         return f"(No prior history with buyer {_mask_phone(phone)} — first contact)"
 
     lines = [f"--- Past conversation with this buyer (phone {_mask_phone(phone)}) ---"]
-    # repo returns newest first; flip to oldest first for reading order
     turns = list(reversed(list(recent_turns)))
     for t in turns:
-        ts = t.turnAt.strftime("%Y-%m-%d %H:%M")
+        ts = _to_local(t.turnAt).strftime("%Y-%m-%d %H:%M %Z")
         lines.append(f"[{ts}] Buyer: {t.buyerMsg}")
         lines.append(f"              You:   {t.agentReply}")
 
@@ -24,8 +40,8 @@ def memory_block(phone, recent_turns, summaries) -> str:
         lines.append("")
         lines.append("--- Relevant older context ---")
         for s in summaries:
-            a = s.coversFromTurnAt.strftime("%Y-%m-%d")
-            b = s.coversToTurnAt.strftime("%Y-%m-%d")
+            a = _to_local(s.coversFromTurnAt).strftime("%Y-%m-%d")
+            b = _to_local(s.coversToTurnAt).strftime("%Y-%m-%d")
             lines.append(f"- [covers {a} → {b}] {s.summary}")
 
     lines.append("---")
