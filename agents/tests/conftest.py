@@ -3,6 +3,12 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+# Provide stub LLM env vars so tests that import app.main don't fail at
+# ChatOpenAI init when the real env vars are absent. Tests that actually call
+# the LLM must monkeypatch the graph; these only prevent import-time errors.
+os.environ.setdefault("MODEL", "gpt-4o-stub")
+os.environ.setdefault("OPENAI_API_KEY", "sk-stub")
+
 from app.db import Base
 import app.memory.models  # noqa: F401  ensure models registered
 

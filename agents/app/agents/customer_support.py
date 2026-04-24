@@ -27,15 +27,10 @@ from app.memory.embedder import embed
 from app.memory.formatter import memory_block as format_memory_block
 from app.memory.formatter import format_search_results
 from typing import Literal as _Lit
+from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
 
 
-class StructuredReply(BaseModel):
-    reply: str = Field(description="The reply to the buyer. If a payment link was generated, include the URL verbatim.")
-    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in this reply")
-    reasoning: str = Field(description="One sentence explaining your confidence")
-
-
-class SupportAgentState(TypedDict):
+class SupportAgentState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     business_context: str
     business_id: str
@@ -45,8 +40,10 @@ class SupportAgentState(TypedDict):
     draft_reply: str
     confidence: float
     reasoning: str
-    action: Literal["auto_send", "queue_approval"]
-    action_id: str
+    structured_reply: StructuredReply | None
+    revision_mode: Literal["draft", "redraft"]
+    previous_draft: StructuredReply | None
+    critique: ManagerCritique | None
 
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:3000")
@@ -183,20 +180,29 @@ Purchase flow:
 - Never invent a payment URL.
 
 Order status flow:
-- If the buyer asks about past purchases, existing orders, or whether a payment succeeded (e.g. "ada saya beli barang?", "did my payment go through?"), call check_order_status (no arguments — it knows the current buyer).
-- Report what the tool returns. Do not guess — if the tool says "no orders found for this phone", tell the buyer that directly. If the tool returns an ERROR, tell the buyer their phone is not on file and ask them to share it.
+- If the buyer asks about past purchases, existing orders, or whether a payment succeeded, call check_order_status (no arguments — it knows the current buyer).
+- Report what the tool returns. Do not guess.
 
-After any tool calls, you MUST respond with valid JSON only, no other text:
+After any tool calls, respond with valid JSON only, no other text:
 {{
   "reply": "<your reply to the buyer (include payment URL when a link was generated)>",
-  "confidence": <float between 0.0 and 1.0>,
-  "reasoning": "<one sentence explaining your confidence>"
+  "confidence": <float 0.0-1.0>,
+  "reasoning": "<one sentence explaining your confidence>",
+  "addressed_questions": ["<buyer question you answered>", ...],
+  "unaddressed_questions": ["<buyer question you did NOT answer, verbatim>", ...],
+  "facts_used": [{{"kind": "product|order|kb|memory", "id": "<id>"}}, ...],
+  "needs_human": <true only if refund / complaint / out-of-scope, else false>
 }}
 
-Confidence guide:
-- 0.9+   : Direct factual answer from product data above, tool-returned order status, or confirmed payment link
-- 0.7-0.9: Reasonable inference from available info
-- <0.7   : Uncertain, info missing, or sensitive topic (complaints, refunds, shipping)
+Rules for facts_used:
+- If you call create_payment_link, add {{"kind":"product","id":"<product_id>"}}.
+- If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference.
+- If you quote a product price or stock number, add that product's {{"kind":"product","id":"<id>"}}.
+
+Confidence guide (for telemetry only, not routing):
+- 0.9+   : Direct factual answer from product data or tool output
+- 0.7-0.9: Reasonable inference
+- <0.7   : Uncertain / info missing / sensitive topic
 """
 
 
@@ -300,10 +306,6 @@ def _make_search_memory_tool(business_id: str):
 
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
-_NL_REPLY_RE = re.compile(
-    r"REPLY:\s*(?P<reply>.*?)\n\s*CONFIDENCE:\s*(?P<conf>[0-9.]+)\s*\n\s*REASONING:\s*(?P<reason>.*?)\s*$",
-    re.DOTALL | re.IGNORECASE,
-)
 
 
 def _try_parse_json_reply(text: str):
@@ -331,30 +333,6 @@ def _try_parse_json_reply(text: str):
     except Exception:
         return None
 
-
-def _try_parse_nl_reply(text: str):
-    """Parse a natural-language labeled response as a last-resort fallback.
-
-    Expected format:
-        REPLY: <reply text, may span multiple lines>
-        CONFIDENCE: <float>
-        REASONING: <one sentence>
-
-    Returns a StructuredReply on success, None on failure.
-    """
-    if not text or not text.strip():
-        return None
-    match = _NL_REPLY_RE.search(text.strip())
-    if not match:
-        return None
-    try:
-        return StructuredReply.model_validate({
-            "reply": match.group("reply").strip(),
-            "confidence": float(match.group("conf")),
-            "reasoning": match.group("reason").strip(),
-        })
-    except Exception:
-        return None
 
 
 def build_customer_support_agent(llm):
@@ -417,23 +395,19 @@ def build_customer_support_agent(llm):
         direct = _try_parse_json_reply(last_text)
         if direct is not None:
             return {
+                "structured_reply": direct,
                 "draft_reply": direct.reply,
                 "confidence": float(direct.confidence),
                 "reasoning": direct.reasoning,
             }
 
         json_retry_instruction = SystemMessage(content=(
-            "Produce the final reply to the buyer as a single JSON object matching this schema:\n"
-            '{"reply": "<text, include payment URL verbatim when a link was generated>", '
-            '"confidence": <float 0.0-1.0>, "reasoning": "<one sentence>"}\n'
+            "Produce the final reply as a single JSON object matching this schema:\n"
+            '{"reply": "<text>", "confidence": <float>, "reasoning": "<sentence>", '
+            '"addressed_questions": [...], "unaddressed_questions": [...], '
+            '"facts_used": [{"kind":"product|order|kb|memory","id":"<id>"}], '
+            '"needs_human": <bool>}\n'
             "Output ONLY the JSON object. No markdown fences, no prose before or after."
-        ))
-        nl_fallback_instruction = SystemMessage(content=(
-            "The previous JSON response could not be parsed. Do NOT use JSON. "
-            "Respond using this exact plain-text format, no markdown fences, no extra prose:\n"
-            "REPLY: <your reply to the buyer, include payment URL verbatim when a link was generated>\n"
-            "CONFIDENCE: <float between 0.0 and 1.0>\n"
-            "REASONING: <one sentence explaining your confidence>"
         ))
         try:
             response = await llm.ainvoke(history + [json_retry_instruction])
@@ -441,94 +415,80 @@ def build_customer_support_agent(llm):
             retry_parsed = _try_parse_json_reply(retry_text)
             if retry_parsed is not None:
                 return {
+                    "structured_reply": retry_parsed,
                     "draft_reply": retry_parsed.reply,
                     "confidence": float(retry_parsed.confidence),
                     "reasoning": retry_parsed.reasoning,
                 }
-
-            _log.warning("JSON retry failed, trying NL fallback")
-            history.append(response)
-            nl_response = await llm.ainvoke(history + [nl_fallback_instruction])
-            nl_text = nl_response.content if isinstance(nl_response.content, str) else ""
-            nl_parsed = _try_parse_nl_reply(nl_text)
-            if nl_parsed is not None:
-                return {
-                    "draft_reply": nl_parsed.reply,
-                    "confidence": float(nl_parsed.confidence),
-                    "reasoning": nl_parsed.reasoning,
-                }
-            raise ValueError(
-                f"JSON retry and NL fallback both failed. "
-                f"json_retry={retry_text[:120]!r} nl={nl_text[:120]!r}"
-            )
         except Exception as e:
-            return {
-                "draft_reply": last_text,
-                "confidence": 0.5,
-                "reasoning": f"Structured output failed: {e}",
-            }
+            _log.warning("JSON retry raised: %s", e)
 
-    async def route_decision(state: SupportAgentState) -> dict:
-        action = "auto_send" if state["confidence"] >= 0.8 else "queue_approval"
-        return {"action": action}
+        _log.warning("JSON parse failed twice; synthesizing needs_human draft")
+        fallback = StructuredReply(
+            reply="Maaf, saya perlu orang semak ni dulu. Sorry, a human will reply shortly.",
+            confidence=0.0,
+            reasoning="JSON parsing failed twice",
+            needs_human=True,
+        )
+        return {
+            "structured_reply": fallback,
+            "draft_reply": fallback.reply,
+            "confidence": 0.0,
+            "reasoning": fallback.reasoning,
+        }
 
-    def _route_edge(state: SupportAgentState) -> Literal["auto_send", "queue_approval"]:
-        return state["action"]
+    async def redraft_reply(state: SupportAgentState) -> dict:
+        """Revise a prior draft using Manager critique.
 
-    async def auto_send(state: SupportAgentState) -> dict:
-        customer_msg = state["messages"][-1].content if state["messages"] else ""
-        action_id = generate_cuid()
-        with SessionLocal() as session:
-            record = AgentAction(
-                id=action_id,
-                businessId=state["business_id"],
-                customerMsg=customer_msg,
-                draftReply=state["draft_reply"],
-                finalReply=state["draft_reply"],
-                confidence=state["confidence"],
-                reasoning=state["reasoning"],
-                status=AgentActionStatus.AUTO_SENT,
-            )
-            session.add(record)
-            session.commit()
-        _enqueue_from_state(state, action_id=action_id)
-        return {"action_id": action_id}
+        Callers MUST pre-populate ``business_context`` and ``memory_block`` in state —
+        this node skips ``load_context`` and ``load_memory`` by design (the Manager is
+        responsible for carrying those values forward from the original draft turn).
+        """
+        prev = state.get("previous_draft")
+        critique = state.get("critique")
+        if prev is None or critique is None:
+            raise ValueError("redraft_reply requires previous_draft and critique in state")
 
-    async def queue_approval(state: SupportAgentState) -> dict:
-        customer_msg = state["messages"][-1].content if state["messages"] else ""
-        action_id = generate_cuid()
-        with SessionLocal() as session:
-            record = AgentAction(
-                id=action_id,
-                businessId=state["business_id"],
-                customerMsg=customer_msg,
-                draftReply=state["draft_reply"],
-                confidence=state["confidence"],
-                reasoning=state["reasoning"],
-                status=AgentActionStatus.PENDING,
-            )
-            session.add(record)
-            session.commit()
-        _enqueue_from_state(state, action_id=action_id)
-        return {"action_id": action_id}
+        system_prompt = SYSTEM_TEMPLATE.format(
+            context=state.get("business_context", ""),
+            memory_block=state.get("memory_block", ""),
+        )
+        revision_instruction = SystemMessage(content=(
+            "You are revising your previous reply based on Manager feedback. "
+            "Produce a corrected reply that addresses ALL of the following:\n\n"
+            f"Previous reply:\n{prev.reply}\n\n"
+            f"Missing facts to add: {critique.missing_facts}\n"
+            f"Incorrect claims to remove/correct: {critique.incorrect_claims}\n"
+            f"Tone issues to fix: {critique.tone_issues}\n"
+            f"Questions still unanswered: {critique.unanswered_questions}\n"
+            f"Keep from the previous draft: {critique.keep_from_draft}\n\n"
+            "Respond with the same JSON schema as before. Emit JSON only."
+        ))
+        history = [SystemMessage(content=system_prompt), *state["messages"], revision_instruction]
+        response = await llm.with_structured_output(StructuredReply).ainvoke(history)
+        return {
+            "structured_reply": response,
+            "draft_reply": response.reply,
+            "confidence": response.confidence,
+            "reasoning": response.reasoning,
+        }
+
+    def _entry_route(state: SupportAgentState) -> Literal["load_context", "redraft_reply"]:
+        return "redraft_reply" if state.get("revision_mode") == "redraft" else "load_context"
 
     graph = StateGraph(SupportAgentState)
     graph.add_node("load_context", load_context)
-    graph.add_node("draft_reply", draft_reply)
-    graph.add_node("route_decision", route_decision)
-    graph.add_node("auto_send", auto_send)
-    graph.add_node("queue_approval", queue_approval)
-
     graph.add_node("load_memory", _load_memory_node)
-    graph.add_edge(START, "load_context")
+    graph.add_node("draft_reply", draft_reply)
+    graph.add_node("redraft_reply", redraft_reply)
+
+    graph.add_conditional_edges(START, _entry_route, {
+        "load_context": "load_context",
+        "redraft_reply": "redraft_reply",
+    })
     graph.add_edge("load_context", "load_memory")
     graph.add_edge("load_memory", "draft_reply")
-    graph.add_edge("draft_reply", "route_decision")
-    graph.add_conditional_edges("route_decision", _route_edge, {
-        "auto_send": "auto_send",
-        "queue_approval": "queue_approval",
-    })
-    graph.add_edge("auto_send", END)
-    graph.add_edge("queue_approval", END)
+    graph.add_edge("draft_reply", END)
+    graph.add_edge("redraft_reply", END)
 
     return graph.compile()

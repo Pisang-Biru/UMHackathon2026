@@ -20,9 +20,21 @@ llm = ChatOpenAI(
 chat_graph = build_chat_agent(llm)
 support_graph = build_customer_support_agent(llm)
 
+import os as _os_for_flag
+from app.agents.manager import build_manager_graph as _build_manager_graph
+
+# MANAGER_ENABLED is read once at import time. Flipping the env var
+# requires restarting the agents process (docker compose restart).
+_MANAGER_ENABLED = _os_for_flag.environ.get("MANAGER_ENABLED", "false").lower() == "true"
+
+if _MANAGER_ENABLED:
+    active_graph = _build_manager_graph(jual_llm=llm, manager_llm=llm)
+else:
+    active_graph = support_graph
+
 app = FastAPI(title="LangGraph Agents API", version="0.1.0")
 app.include_router(make_agent_router(chat_graph))
-app.include_router(make_support_router(support_graph))
+app.include_router(make_support_router(active_graph))
 app.include_router(memory_router)
 
 
