@@ -16,3 +16,4 @@ celery==5.4.0
 kombu[amqp]==5.4.2
 alembic==1.14.0
 phonenumbers==8.13.50
+redis>=5.0
