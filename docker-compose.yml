@@ -70,9 +70,6 @@ services:
 
   agents-api:
     image: pisang-agents:dev
-    build:
-      context: .
-      dockerfile: agents/Dockerfile
     <<: *agents-common
     environment:
       <<: *agents-env
@@ -87,9 +84,6 @@ services:
 
   agents-worker:
     image: pisang-agents:dev
-    build:
-      context: .
-      dockerfile: agents/Dockerfile
     <<: *agents-common
     environment:
       <<: *agents-env
@@ -105,9 +99,6 @@ services:
 
   agents-beat:
     image: pisang-agents:dev
-    build:
-      context: .
-      dockerfile: agents/Dockerfile
     <<: *agents-common
     environment:
       <<: *agents-env
