@@ -50,3 +50,27 @@ class AgentAction(Base):
     status = Column(SAEnum(AgentActionStatus, name="AgentActionStatus"), nullable=False, default=AgentActionStatus.PENDING)
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class OrderStatus(enum.Enum):
+    PENDING_PAYMENT = "PENDING_PAYMENT"
+    PAID = "PAID"
+    CANCELLED = "CANCELLED"
+
+
+class Order(Base):
+    __tablename__ = "order"
+    id = Column(String, primary_key=True)
+    businessId = Column(String, nullable=False)
+    productId = Column(String, nullable=False)
+    agentType = Column(String, nullable=True)
+    qty = Column(Integer, nullable=False)
+    unitPrice = Column(Numeric(10, 2), nullable=False)
+    totalAmount = Column(Numeric(10, 2), nullable=False)
+    status = Column(SAEnum(OrderStatus, name="OrderStatus"), nullable=False, default=OrderStatus.PENDING_PAYMENT)
+    buyerName = Column(String, nullable=True)
+    buyerContact = Column(String, nullable=True)
+    paidAt = Column(DateTime, nullable=True)
+    acknowledgedAt = Column(DateTime, nullable=True)
+    createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
