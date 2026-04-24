@@ -18,6 +18,13 @@ async function requireBusinessOwner(businessId: string, userId: string) {
   return business
 }
 
+function enqueueProductReindex(productId: string) {
+  // fire-and-forget reindex to agent memory service
+  const agentsUrl = process.env.AGENTS_URL ?? 'http://localhost:8000'
+  fetch(`${agentsUrl}/memory/product/${productId}/reindex`, { method: 'POST' })
+    .catch((err) => console.warn('reindex enqueue failed', err))
+}
+
 export const fetchProducts = createServerFn({ method: 'GET' })
   .inputValidator((data: unknown) => {
     if (typeof data !== 'object' || data === null || typeof (data as Record<string, unknown>).businessId !== 'string') {
@@ -55,6 +62,7 @@ export const createProduct = createServerFn({ method: 'POST' })
     const session = await requireSession()
     await requireBusinessOwner(data.businessId, session.user.id)
     const product = await prisma.product.create({ data })
+    enqueueProductReindex(product.id)
     return { ...product, price: product.price.toNumber() }
   })
 
@@ -87,6 +95,7 @@ export const updateProduct = createServerFn({ method: 'POST' })
       where: { id: data.id },
       data: { name: data.name, price: data.price, stock: data.stock, description: data.description ?? null },
     })
+    enqueueProductReindex(updated.id)
     return { ...updated, price: updated.price.toNumber() }
   })
 

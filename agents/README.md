@@ -182,3 +182,39 @@ llm = ChatOpenAI(model="gpt-4o-mini")
 ```
 
 The agent code doesn't change — only `main.py`.
+
+## Running with docker (recommended)
+
+All infra (Postgres + pgvector, RabbitMQ) and all agent services (FastAPI, Celery worker, Celery beat) run under docker compose. See the repo root README for the full quickstart. Short form:
+
+```bash
+# from the repo root
+./scripts/dev.sh up          # first run: builds + seeds
+./scripts/dev.sh logs        # tail api + worker
+./scripts/dev.sh psql        # shell into the DB
+./scripts/dev.sh reset       # wipe volumes + re-seed
+```
+
+## Running on host (without docker)
+
+Only needed if you prefer native processes (faster Python iteration at the cost of manual setup).
+
+Prereqs:
+- Postgres with `pgvector` extension (run `psql -c "CREATE EXTENSION vector"` once as superuser)
+- RabbitMQ on `localhost:5672`
+- `DATABASE_URL` exported in a `.env` file next to this README
+
+Three processes:
+
+```bash
+uvicorn main:app --reload
+celery -A app.worker.celery_app worker -Q memory --loglevel=info --pool=threads --concurrency=2
+celery -A app.worker.celery_app beat --loglevel=info
+```
+
+Smoke:
+
+```bash
+python scripts/smoke_memory.py
+```
+

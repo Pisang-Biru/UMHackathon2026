@@ -1,5 +1,6 @@
 export type AgentActionStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO_SENT'
 export type InboxTab = 'mine' | 'recent' | 'unread'
+export type OrderItemStatus = 'PENDING_PAYMENT' | 'PAID' | 'CANCELLED'
 
 export interface InboxAction {
   id: string
@@ -15,6 +16,24 @@ export interface InboxAction {
   createdAt: Date
   updatedAt: Date
 }
+
+export interface InboxOrder {
+  id: string
+  businessId: string
+  productName: string
+  qty: number
+  totalAmount: number
+  buyerName: string | null
+  buyerContact: string | null
+  status: OrderItemStatus
+  paidAt: Date | null
+  acknowledgedAt: Date | null
+  createdAt: Date
+}
+
+export type InboxItem =
+  | { kind: 'action'; action: InboxAction }
+  | { kind: 'order'; order: InboxOrder }
 
 export interface AgentGroup {
   agentType: string
@@ -48,4 +67,24 @@ export function matchesTab(action: InboxAction, tab: InboxTab, now: Date = new D
     case 'unread':
       return action.viewedAt === null && action.status !== 'AUTO_SENT'
   }
+}
+
+function matchesOrderTab(order: InboxOrder, tab: InboxTab, now: Date): boolean {
+  switch (tab) {
+    case 'mine':
+      return order.status === 'PAID' && order.acknowledgedAt === null
+    case 'recent':
+      return (
+        (order.status === 'PAID' || order.status === 'CANCELLED') &&
+        now.getTime() - order.createdAt.getTime() <= SEVEN_DAYS_MS
+      )
+    case 'unread':
+      return order.status === 'PAID' && order.acknowledgedAt === null
+  }
+}
+
+export function matchesItemTab(item: InboxItem, tab: InboxTab, now: Date = new Date()): boolean {
+  return item.kind === 'action'
+    ? matchesTab(item.action, tab, now)
+    : matchesOrderTab(item.order, tab, now)
 }

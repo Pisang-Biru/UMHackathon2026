@@ -145,7 +145,7 @@ describe('buildAgentCards', () => {
     ]
     const cards = buildAgentCards(actions, NOW)
     expect(cards).toHaveLength(2)
-    expect(cards.map(c => c.name)).toContain('support')
+    expect(cards.map(c => c.name)).toContain('Support Agent')
     expect(cards.map(c => c.name)).toContain('sales')
   })
 
@@ -165,10 +165,10 @@ describe('buildAgentCards', () => {
     expect(cards[0].task).toBe('a'.repeat(60) + '…')
   })
 
-  it('sets avatar as first 2 chars uppercase', () => {
+  it('sets avatar from display name initials', () => {
     const actions = [makeAction('support', 'PENDING')]
     const cards = buildAgentCards(actions, NOW)
-    expect(cards[0].avatar).toBe('SU')
+    expect(cards[0].avatar).toBe('SA')
   })
 
   it('assigns colors deterministically by index', () => {

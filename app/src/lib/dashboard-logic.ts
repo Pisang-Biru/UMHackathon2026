@@ -1,4 +1,5 @@
 import type { AgentCardData } from '#/components/dashboard/agent-card'
+import { getAgentName, getAgentAvatar } from '#/lib/agent-meta'
 
 const AGENT_COLORS = ['#3b7ef8', '#00c97a', '#a78bfa', '#f59e0b', '#ef4444']
 
@@ -60,14 +61,14 @@ export function buildAgentCards(
 
   return Array.from(latestByAgent.entries()).map(([agentType, latest], i) => ({
     id: agentType,
-    name: agentType,
+    name: getAgentName(agentType),
     status: mapAgentStatus(latest.status),
     task:
       latest.customerMsg.length > 60
         ? latest.customerMsg.slice(0, 60) + '…'
         : latest.customerMsg,
     lastActive: formatRelativeTime(latest.createdAt, now),
-    avatar: agentType.slice(0, 2).toUpperCase(),
+    avatar: getAgentAvatar(agentType),
     color: AGENT_COLORS[i % AGENT_COLORS.length],
   }))
 }
