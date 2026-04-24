@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from app.db import SessionLocal, AgentAction, AgentActionStatus
+from app.memory.phone import normalize_phone
 from typing import Optional
 
 
@@ -72,7 +73,7 @@ def make_support_router(support_graph):
                 "messages": [HumanMessage(content=req.message)],
                 "business_id": req.business_id,
                 "customer_id": req.customer_id,
-                "customer_phone": req.customer_phone or "",
+                "customer_phone": normalize_phone(req.customer_phone) if req.customer_phone else "",
                 "memory_block": "",
                 "business_context": "",
                 "draft_reply": "",
