@@ -22,7 +22,7 @@ export OPENAI_API_BASE=https://api.openai.com/v1
 ## Quickstart
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Pisang-Biru/UMHackathon2026.git
 cd umhackathon2026
 
 # backend (Postgres + pgvector, RabbitMQ, FastAPI, Celery worker + beat)
@@ -118,10 +118,3 @@ docs/superpowers/         specs + implementation plans
 scripts/dev.sh            docker compose lifecycle wrapper
 docker-compose.yml        full dev stack
 ```
-
-## Docs
-
-Design specs and implementation plans live in `docs/superpowers/`. Notable:
-
-- `docs/superpowers/specs/2026-04-24-pgvector-agent-memory-design.md` — memory architecture
-- `docs/superpowers/specs/2026-04-24-dev-docker-infra-design.md` — this infra
