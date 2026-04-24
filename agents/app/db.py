@@ -57,6 +57,7 @@ class AgentAction(Base):
     iterations = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    approvedAt = Column(DateTime, nullable=True)
 
 
 class OrderStatus(enum.Enum):

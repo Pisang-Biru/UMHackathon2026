@@ -1,7 +1,7 @@
 import logging
 import os
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from app.db import SessionLocal, AgentAction, AgentActionStatus
@@ -13,8 +13,10 @@ router = APIRouter(prefix="/agent", tags=["support"])
 
 _log = logging.getLogger(__name__)
 
-# Module-level dict mapping action_id -> Celery task_id for pending memory tasks.
-# Used by /unsend to revoke the embed task before it fires.
+# KNOWN LIMITATION: _PENDING_MEMORY_TASKS is process-local and lost on
+# restart or with multiple workers. Acceptable for hackathon / single-worker
+# dev. Production should persist embedTaskId on AgentAction or use Redis
+# with a short TTL — see plan follow-up items.
 _PENDING_MEMORY_TASKS: dict[str, Optional[str]] = {}
 
 UNSEND_WINDOW_SECONDS = 10
@@ -91,7 +93,8 @@ class AgentActionOut(BaseModel):
     confidence: float
     reasoning: str
     status: str
-    createdAt: Optional[str] = None
+    createdAt: str
+    approvedAt: Optional[str] = None
 
 
 def make_support_router(support_graph):
@@ -146,8 +149,11 @@ def make_support_router(support_graph):
                 return SupportChatResponse(status="sent", reply=draft, action_id=action_id, confidence=confidence)
             return SupportChatResponse(status="pending_approval", action_id=action_id, confidence=confidence)
 
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            _log.exception("support_chat failed")
+            raise HTTPException(status_code=500, detail="Agent processing failed")
 
     @router.get("/actions", response_model=list[AgentActionOut])
     def list_actions(business_id: str, status: Optional[str] = None):
@@ -170,7 +176,8 @@ def make_support_router(support_graph):
                     confidence=a.confidence,
                     reasoning=a.reasoning,
                     status=a.status.value,
-                    createdAt=a.createdAt.isoformat() if a.createdAt else None,
+                    createdAt=a.createdAt.isoformat(),
+                    approvedAt=a.approvedAt.isoformat() if a.approvedAt else None,
                 )
                 for a in actions
             ]
@@ -186,6 +193,7 @@ def make_support_router(support_graph):
 
             final_text = body.reply if body and body.reply else action.draftReply
             action.status = AgentActionStatus.APPROVED
+            action.approvedAt = datetime.now(timezone.utc)
             action.finalReply = final_text
             session.commit()
             session.refresh(action)
@@ -203,7 +211,8 @@ def make_support_router(support_graph):
                 confidence=action.confidence,
                 reasoning=action.reasoning,
                 status=action.status.value,
-                createdAt=action.createdAt.isoformat() if action.createdAt else None,
+                createdAt=action.createdAt.isoformat(),
+                approvedAt=action.approvedAt.isoformat() if action.approvedAt else None,
             )
 
     @router.post("/actions/{action_id}/reject", response_model=AgentActionOut)
@@ -226,10 +235,9 @@ def make_support_router(support_graph):
                 confidence=action.confidence,
                 reasoning=action.reasoning,
                 status=action.status.value,
-                createdAt=action.createdAt.isoformat() if action.createdAt else None,
+                createdAt=action.createdAt.isoformat(),
+                approvedAt=action.approvedAt.isoformat() if action.approvedAt else None,
             )
-
-    from fastapi import Response
 
     @router.get("/actions/{action_id}/iterations")
     def get_iterations(action_id: str, response: Response):
@@ -248,11 +256,13 @@ def make_support_router(support_graph):
                 raise HTTPException(status_code=404, detail="Action not found")
             if action.status != AgentActionStatus.APPROVED:
                 raise HTTPException(status_code=400, detail="Only APPROVED actions can be unsent")
-            # action.updatedAt may be naive UTC; compare as UTC
-            updated = action.updatedAt
-            if updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) - updated > timedelta(seconds=UNSEND_WINDOW_SECONDS):
+            if action.approvedAt is None:
+                raise HTTPException(status_code=400, detail="Action was not approved via the undo-enabled path")
+            # action.approvedAt may be naive UTC; compare as UTC
+            approved = action.approvedAt
+            if approved.tzinfo is None:
+                approved = approved.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - approved > timedelta(seconds=UNSEND_WINDOW_SECONDS):
                 raise HTTPException(status_code=409, detail="Unsend window expired")
             action.status = AgentActionStatus.PENDING
             action.finalReply = None
@@ -263,7 +273,8 @@ def make_support_router(support_graph):
             id=action.id, businessId=action.businessId, customerMsg=action.customerMsg,
             draftReply=action.draftReply, finalReply=action.finalReply,
             confidence=action.confidence, reasoning=action.reasoning,
-            status=action.status.value, createdAt=action.createdAt.isoformat() if action.createdAt else None,
+            status=action.status.value, createdAt=action.createdAt.isoformat(),
+            approvedAt=action.approvedAt.isoformat() if action.approvedAt else None,
         )
 
     return router

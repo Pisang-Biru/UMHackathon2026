@@ -2,14 +2,15 @@ from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 
 
-def _make_action_stub(status, updatedAt):
+def _make_action_stub(status, approvedAt):
     from app.db import AgentAction, AgentActionStatus
     a = AgentAction(
         id="a1", businessId="b", customerMsg="m", draftReply="d",
         finalReply="sent", confidence=0.5, reasoning="r",
         status=getattr(AgentActionStatus, status),
+        createdAt=datetime.now(timezone.utc),
     )
-    a.updatedAt = updatedAt
+    a.approvedAt = approvedAt
     return a
 
 

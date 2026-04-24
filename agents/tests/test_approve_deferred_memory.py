@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 
@@ -12,6 +13,7 @@ def test_approve_uses_body_reply_and_delays_memory_enqueue_10s(monkeypatch):
         id="a1", businessId="biz", customerMsg="hi", draftReply="d",
         finalReply=None, confidence=0.5, reasoning="r",
         status=AgentActionStatus.PENDING,
+        createdAt=datetime.now(timezone.utc),
     )
 
     committed = {"flag": False}
