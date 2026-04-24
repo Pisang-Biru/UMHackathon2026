@@ -26,7 +26,6 @@ function PaymentPage() {
   const [status, setStatus] = React.useState<string>(order.status)
   const [paid, setPaid] = React.useState(order.status === 'PAID' ? order : null)
   const [buyerName, setBuyerName] = React.useState('')
-  const [buyerContact, setBuyerContact] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -34,7 +33,7 @@ function PaymentPage() {
     setBusy(true)
     setError(null)
     try {
-      const updated = await submitMockPayment({ data: { orderId: order.id, buyerName, buyerContact } })
+      const updated = await submitMockPayment({ data: { orderId: order.id, buyerName } })
       setPaid(updated)
       setStatus('PAID')
     } catch (e) {
@@ -68,7 +67,7 @@ function PaymentPage() {
     )
   }
 
-  const canSubmit = buyerName.trim().length > 0 && buyerContact.trim().length > 0 && !busy
+  const canSubmit = buyerName.trim().length > 0 && !busy
   const total = formatOrderTotal(Number(order.totalAmount))
 
   return (
@@ -91,14 +90,14 @@ function PaymentPage() {
             style={{ background: '#16161a', border: '1px solid #2a2a32', borderRadius: '8px', padding: '10px', color: '#e8e6e2', fontSize: '13px' }}
           />
         </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ color: '#888', fontSize: '11px' }}>Phone or email</span>
-          <input
-            value={buyerContact}
-            onChange={(e) => setBuyerContact(e.target.value)}
-            style={{ background: '#16161a', border: '1px solid #2a2a32', borderRadius: '8px', padding: '10px', color: '#e8e6e2', fontSize: '13px' }}
-          />
-        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ color: '#888', fontSize: '11px' }}>Phone on file</span>
+          <div
+            style={{ background: '#0f0f12', border: '1px solid #1e1e24', borderRadius: '8px', padding: '10px', color: order.buyerContact ? '#e8e6e2' : '#555', fontSize: '13px' }}
+          >
+            {order.buyerContact ?? '(not set)'}
+          </div>
+        </div>
       </div>
 
       {error && <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '12px' }}>{error}</p>}

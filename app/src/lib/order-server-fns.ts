@@ -51,8 +51,7 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
     const d = data as Record<string, unknown>
     if (typeof d.orderId !== 'string') throw new Error('orderId required')
     if (typeof d.buyerName !== 'string' || d.buyerName.trim().length < 1) throw new Error('buyerName required')
-    if (typeof d.buyerContact !== 'string' || d.buyerContact.trim().length < 1) throw new Error('buyerContact required')
-    return { orderId: d.orderId, buyerName: d.buyerName.trim(), buyerContact: d.buyerContact.trim() }
+    return { orderId: d.orderId, buyerName: d.buyerName.trim() }
   })
   .handler(async ({ data }) => {
     const result = await prisma.$transaction(async (tx) => {
@@ -66,7 +65,6 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
           status: 'PAID',
           paidAt: new Date(),
           buyerName: data.buyerName,
-          buyerContact: data.buyerContact,
         },
       })
       return { updated, productId: order.productId }
