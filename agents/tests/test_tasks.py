@@ -93,3 +93,39 @@ def test_embed_past_action_upserts(session, engine, monkeypatch):
 
     rows = session.query(models.MemoryPastAction).filter_by(id="act1").all()
     assert len(rows) == 1
+
+
+def test_summarize_old_turns(session, engine, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    from datetime import datetime, timezone, timedelta
+    TestSession = sessionmaker(bind=engine)
+
+    now = datetime.now(timezone.utc)
+    with TestSession() as s:
+        for i in range(25):
+            s.add(models.MemoryConversationTurn(
+                id=f"t{i}",
+                businessId="bizS",
+                customerPhone="+60111",
+                buyerMsg=f"q{i}",
+                agentReply=f"a{i}",
+                turnAt=now - timedelta(minutes=25 - i),
+                embedding=[0.01] * 1024,
+                summarized=False,
+            ))
+        s.commit()
+
+    monkeypatch.setattr(tasks, "SessionLocal", TestSession)
+    monkeypatch.setattr(tasks, "embed", lambda texts: [[0.5] * 1024 for _ in texts])
+    monkeypatch.setattr(tasks, "_llm_summarize",
+                         lambda turns: "Buyer asked several questions about sambal.")
+
+    tasks.summarize_old_turns.delay()
+
+    summaries = session.query(models.MemoryConversationSummary).filter_by(businessId="bizS").all()
+    assert len(summaries) == 1
+
+    turns = session.query(models.MemoryConversationTurn).filter_by(businessId="bizS").order_by(
+        models.MemoryConversationTurn.turnAt.asc()).all()
+    assert [t.summarized for t in turns[:5]] == [True] * 5
+    assert all(not t.summarized for t in turns[5:])

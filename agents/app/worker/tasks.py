@@ -60,3 +60,68 @@ def embed_past_action(self, action_id: str):
             session.commit()
     except Exception as e:
         raise self.retry(exc=e)
+
+
+import os
+from sqlalchemy import select, func
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
+
+
+def _llm_summarize(turns) -> str:
+    model = ChatOpenAI(
+        model=os.getenv("MODEL"),
+        openai_api_key=os.getenv("API_KEY"),
+        openai_api_base=os.getenv("OPENAI_API_BASE"),
+        temperature=0.3,
+    )
+    convo = "\n".join(f"Buyer: {t.buyerMsg}\nSeller: {t.agentReply}" for t in turns)
+    resp = model.invoke([
+        SystemMessage(content=(
+            "Summarize the following buyer/seller exchange in about 200 tokens. "
+            "Preserve facts stated, preferences revealed, and unresolved items. "
+            "Output plain text, no headings."
+        )),
+        HumanMessage(content=convo),
+    ])
+    return resp.content if isinstance(resp.content, str) else str(resp.content)
+
+
+@celery.task
+def summarize_old_turns():
+    recent_keep = int(os.environ.get("MEMORY_RECENT_TURNS", "20"))
+    batch_size = int(os.environ.get("MEMORY_SUMMARY_BATCH", "20"))
+
+    with SessionLocal() as session:
+        from app.memory.models import MemoryConversationTurn as T
+
+        pairs = session.execute(
+            select(T.businessId, T.customerPhone, func.count(T.id))
+            .where(T.summarized == False)  # noqa: E712
+            .group_by(T.businessId, T.customerPhone)
+            .having(func.count(T.id) > recent_keep)
+        ).all()
+
+        for business_id, phone, _cnt in pairs:
+            turns = session.execute(
+                select(T)
+                .where(T.businessId == business_id, T.customerPhone == phone, T.summarized == False)  # noqa: E712
+                .order_by(T.turnAt.asc())
+            ).scalars().all()
+
+            if len(turns) <= recent_keep:
+                continue
+
+            to_summarize = turns[: len(turns) - recent_keep][:batch_size]
+            if not to_summarize:
+                continue
+
+            summary_text = _llm_summarize(to_summarize)
+            vec = embed([summary_text])[0]
+            repo.insert_summary(
+                session, business_id, phone, summary_text,
+                to_summarize[0].turnAt, to_summarize[-1].turnAt, vec,
+            )
+            for t in to_summarize:
+                t.summarized = True
+            session.commit()
