@@ -30,6 +30,7 @@ from app.memory.formatter import format_search_results
 from typing import Literal as _Lit
 from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
 from app.agents._traced import traced
+from app.agents._json_utils import structured_or_repair
 from app.events import emit
 
 AGENT_META = {
@@ -122,53 +123,100 @@ def _build_context(business_id: str) -> str:
 
 
 def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: str | None = None) -> tuple[str, str]:
-    if qty <= 0:
-        raise ValueError("qty must be positive")
-    with SessionLocal() as session:
-        product = session.query(Product).filter(
-            Product.id == product_id,
-            Product.businessId == business_id,
-        ).first()
-        if not product:
-            raise ValueError(f"Product {product_id} not found for this business")
-        unit_price = Decimal(product.price)
+    """Single-item helper preserved for tests and direct callers.
+    Internally a one-item cart, so groupId == order.id and URL points at /pay/<order.id>.
+    """
+    group_id, payment_url, lines = _create_cart(
+        business_id, [{"product_id": product_id, "qty": qty}], buyer_contact=buyer_contact
+    )
+    return lines[0]["order_id"], payment_url
 
-        rows = session.execute(
-            update(Product)
-            .where(
+
+def _create_cart(
+    business_id: str,
+    items: list[dict],
+    buyer_contact: str | None = None,
+) -> tuple[str, str, list[dict]]:
+    """Create one Order row per line item, all sharing the same groupId.
+    Returns (group_id, payment_url, line_items) where each line_item is
+    {order_id, product_id, product_name, qty, unit_price, line_total}.
+    """
+    if not items:
+        raise ValueError("items must be non-empty")
+    norm: list[tuple[str, int]] = []
+    for it in items:
+        pid = it.get("product_id") if isinstance(it, dict) else None
+        qty = it.get("qty") if isinstance(it, dict) else None
+        if not pid or not isinstance(pid, str):
+            raise ValueError("each item needs product_id")
+        if not isinstance(qty, int) or qty <= 0:
+            raise ValueError(f"qty for {pid} must be positive int")
+        norm.append((pid, qty))
+
+    group_id = generate_cuid()
+    payment_url = f"{APP_URL}/pay/{group_id}"
+    lines: list[dict] = []
+    product_ids_for_reindex: list[str] = []
+
+    with SessionLocal() as session:
+        for product_id, qty in norm:
+            product = session.query(Product).filter(
                 Product.id == product_id,
                 Product.businessId == business_id,
-                Product.stock >= qty,
-            )
-            .values(stock=Product.stock - qty)
-        ).rowcount
-        if rows == 0:
-            session.rollback()
-            raise ValueError(f"Insufficient stock for {product.name}")
+            ).first()
+            if not product:
+                session.rollback()
+                raise ValueError(f"Product {product_id} not found for this business")
+            unit_price = Decimal(product.price)
 
-        order_id = generate_cuid()
-        total = unit_price * Decimal(qty)
-        payment_url = f"{APP_URL}/pay/{order_id}"
-        order = Order(
-            id=order_id,
-            businessId=business_id,
-            productId=product_id,
-            agentType="support",
-            qty=qty,
-            unitPrice=unit_price,
-            totalAmount=total,
-            status=OrderStatus.PENDING_PAYMENT,
-            buyerContact=buyer_contact or None,
-            paymentUrl=payment_url,
-        )
-        session.add(order)
+            rows = session.execute(
+                update(Product)
+                .where(
+                    Product.id == product_id,
+                    Product.businessId == business_id,
+                    Product.stock >= qty,
+                )
+                .values(stock=Product.stock - qty)
+            ).rowcount
+            if rows == 0:
+                session.rollback()
+                raise ValueError(f"Insufficient stock for {product.name}")
+
+            order_id = generate_cuid()
+            line_total = unit_price * Decimal(qty)
+            order = Order(
+                id=order_id,
+                businessId=business_id,
+                productId=product_id,
+                agentType="support",
+                qty=qty,
+                unitPrice=unit_price,
+                totalAmount=line_total,
+                status=OrderStatus.PENDING_PAYMENT,
+                buyerContact=buyer_contact or None,
+                paymentUrl=payment_url,
+                groupId=group_id,
+            )
+            session.add(order)
+            lines.append({
+                "order_id": order_id,
+                "product_id": product_id,
+                "product_name": product.name,
+                "qty": qty,
+                "unit_price": unit_price,
+                "line_total": line_total,
+            })
+            product_ids_for_reindex.append(product_id)
         session.commit()
-        try:
-            from app.worker.tasks import embed_product
-            embed_product.delay(product_id)
-        except Exception:
-            pass
-        return order_id, payment_url
+
+    try:
+        from app.worker.tasks import embed_product
+        for pid in product_ids_for_reindex:
+            embed_product.delay(pid)
+    except Exception:
+        pass
+
+    return group_id, payment_url, lines
 
 
 SYSTEM_TEMPLATE = """\
@@ -185,9 +233,10 @@ Your job:
 - If you are unsure about anything, say so honestly — never fabricate stock or prices
 
 Purchase flow:
-- If the buyer clearly wants to purchase a specific product and quantity, call the create_payment_link tool with the product id and quantity.
-- After the tool returns a URL, include that URL verbatim in your reply.
-- Never invent a payment URL.
+- If the buyer wants to purchase one or more products, call create_payment_link ONCE with ALL items as a single list. Do NOT call it multiple times — one call per buyer turn covers the whole cart.
+- The tool argument is `items`, a list of objects: [{{"product_id": "<id>", "qty": <int>}}, ...].
+- The tool returns ONE payment URL covering every line item. Include that single URL verbatim in your reply.
+- Never invent a payment URL. Never produce more than one payment URL per cart.
 
 Order status flow:
 - If the buyer asks about past purchases, existing orders, or whether a payment succeeded, call check_order_status (no arguments — it knows the current buyer).
@@ -205,7 +254,7 @@ After any tool calls, respond with valid JSON only, no other text:
 }}
 
 Rules for facts_used:
-- If you call create_payment_link, add {{"kind":"product","id":"<product_id>"}}.
+- If you call create_payment_link, add one {{"kind":"product","id":"<product_id>"}} per item in the cart.
 - If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference. If the tool returns "no orders found for this phone", cite {{"kind":"order","id":"none:<digits-only phone>"}} — that is the citable negative.
 - If you quote a product price or stock number, add that product's {{"kind":"product","id":"<id>"}}.
 - If you reference content from search_memory, copy the [id=<short>] marker into facts_used as {{"kind":"<kind>","id":"<short>"}}. For kind="past_action", use {{"kind":"memory:past_action","id":"<short>"}}. For empty results, cite the [id=none:<hash>] marker — that grounds "I checked, found nothing".
@@ -448,16 +497,17 @@ def build_customer_support_agent(llm):
 
     def _make_tool(business_id: str, customer_phone: str):
         @tool
-        def create_payment_link(product_id: str, qty: int) -> str:
-            """Create a payment link for a buyer who wants to purchase a product.
+        def create_payment_link(items: list[dict]) -> str:
+            """Create a SINGLE payment link covering one or more line items.
             Args:
-                product_id: the product id from the product list
-                qty: quantity the buyer wants (positive integer)
-            Returns a URL the buyer can open to pay, or an error message.
+                items: list of {"product_id": "<id>", "qty": <positive int>} — one entry per
+                    distinct product the buyer wants. Pass ALL products from this cart in
+                    one call; do NOT invoke this tool multiple times in the same turn.
+            Returns one URL the buyer can open to pay for the whole cart, or an error message.
             """
             try:
-                _order_id, payment_url = _create_order(
-                    business_id, product_id, qty, buyer_contact=customer_phone or None
+                _group_id, payment_url, _lines = _create_cart(
+                    business_id, items or [], buyer_contact=customer_phone or None
                 )
                 return payment_url
             except Exception as e:
@@ -619,7 +669,7 @@ def build_customer_support_agent(llm):
         ))
         history = [SystemMessage(content=system_prompt), *state["messages"], revision_instruction]
         _orig_msg_count = len(history)
-        response = await llm.with_structured_output(StructuredReply).ainvoke(history)
+        response = await structured_or_repair(llm, history, StructuredReply)
         # message.out — the model's drafted reply body.
         try:
             _out_text = response.reply if hasattr(response, "reply") else None

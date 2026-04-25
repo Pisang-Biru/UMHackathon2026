@@ -6,12 +6,15 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["public"]
 }
 
 model Todo {
   id        Int      @id @default(autoincrement())
   title     String
   createdAt DateTime @default(now())
+
+  @@schema("public")
 }
 
 model User {
@@ -28,6 +31,7 @@ model User {
 
   @@unique([email])
   @@map("user")
+  @@schema("public")
 }
 
 model Session {
@@ -44,6 +48,7 @@ model Session {
   @@unique([token])
   @@index([userId])
   @@map("session")
+  @@schema("public")
 }
 
 model Account {
@@ -64,6 +69,7 @@ model Account {
 
   @@index([userId])
   @@map("account")
+  @@schema("public")
 }
 
 model Verification {
@@ -76,6 +82,7 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+  @@schema("public")
 }
 
 model Business {
@@ -92,6 +99,7 @@ model Business {
   updatedAt    DateTime      @updatedAt
 
   @@map("business")
+  @@schema("public")
 }
 
 model Product {
@@ -107,6 +115,7 @@ model Product {
   updatedAt   DateTime @updatedAt
 
   @@map("product")
+  @@schema("public")
 }
 
 enum AgentActionStatus {
@@ -114,6 +123,8 @@ enum AgentActionStatus {
   APPROVED
   REJECTED
   AUTO_SENT
+
+  @@schema("public")
 }
 
 model AgentAction {
@@ -136,12 +147,15 @@ model AgentAction {
   updatedAt   DateTime          @updatedAt
 
   @@map("agent_action")
+  @@schema("public")
 }
 
 enum OrderStatus {
   PENDING_PAYMENT
   PAID
   CANCELLED
+
+  @@schema("public")
 }
 
 model Order {
@@ -158,6 +172,7 @@ model Order {
   buyerName       String?
   buyerContact    String?
   paymentUrl      String?
+  groupId         String?
   paidAt          DateTime?
   acknowledgedAt  DateTime?
   createdAt       DateTime    @default(now())
@@ -165,4 +180,6 @@ model Order {
 
   @@map("order")
   @@index([businessId, status])
+  @@index([groupId])
+  @@schema("public")
 }

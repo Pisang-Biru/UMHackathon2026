@@ -79,6 +79,7 @@ class Order(Base):
     buyerName = Column(String, nullable=True)
     buyerContact = Column(String, nullable=True)
     paymentUrl = Column(String, nullable=True)
+    groupId = Column(String, nullable=True)
     paidAt = Column(DateTime, nullable=True)
     acknowledgedAt = Column(DateTime, nullable=True)
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -87,6 +88,7 @@ class Order(Base):
 
 class Agent(Base):
     __tablename__ = "agents"
+    __table_args__ = {"schema": "agents"}
     id = Column(Text, primary_key=True)
     name = Column(Text, nullable=False)
     role = Column(Text, nullable=False)
@@ -96,13 +98,15 @@ class Agent(Base):
 
 class BusinessAgent(Base):
     __tablename__ = "business_agents"
+    __table_args__ = {"schema": "agents"}
     business_id = Column(Text, primary_key=True)
-    agent_id = Column(Text, ForeignKey("agents.id"), primary_key=True)
+    agent_id = Column(Text, ForeignKey("agents.agents.id"), primary_key=True)
     enabled = Column(Boolean, nullable=False, server_default=text("true"))
 
 
 class AgentEvent(Base):
     __tablename__ = "agent_events"
+    __table_args__ = {"schema": "agents"}
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     ts = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
     agent_id = Column(Text, nullable=False)

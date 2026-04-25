@@ -15,10 +15,34 @@ config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 target_metadata = Base.metadata
 
 
+def _include_object(obj, name, type_, reflected, compare_to):
+    """Only autogenerate / compare against the `agents` schema.
+
+    Prisma owns `public.*` — alembic must ignore it, otherwise autogenerate
+    will offer to drop or alter Prisma-owned tables, columns, and sequences.
+    `alembic_version` itself lives in `agents` (see `version_table_schema`).
+    """
+    if type_ in ("table", "index", "unique_constraint", "foreign_key_constraint"):
+        return getattr(obj, "schema", None) == "agents"
+    if type_ == "column":
+        # columns inherit the schema filter from their parent table
+        return getattr(getattr(obj, "table", None), "schema", None) == "agents"
+    if type_ == "sequence":
+        return getattr(obj, "schema", None) == "agents"
+    return True  # schema-type objects: let alembic handle as-is
+
+
 def run_migrations_offline():
     url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True,
-                       dialect_opts={"paramstyle": "named"})
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        version_table_schema="agents",
+        include_schemas=True,
+        include_object=_include_object,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
@@ -30,7 +54,13 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table_schema="agents",
+            include_schemas=True,
+            include_object=_include_object,
+        )
         with context.begin_transaction():
             context.run_migrations()
 

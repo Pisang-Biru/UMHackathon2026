@@ -3,6 +3,7 @@ import logging
 import time
 from langchain_core.messages import SystemMessage
 from app.schemas.agent_io import StructuredReply, IterationEntry
+from app.agents._json_utils import structured_or_repair
 
 _log = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def make_manager_rewrite_node(llm):
             )),
             *state.get("messages", []),
         ]
-        result = await llm.with_structured_output(StructuredReply).ainvoke(prompt)
+        result = await structured_or_repair(llm, prompt, StructuredReply)
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         new_entry = IterationEntry(

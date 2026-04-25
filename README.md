@@ -66,6 +66,40 @@ After editing Python in `agents/`, `uvicorn --reload` picks it up automatically.
 docker compose restart agents-worker
 ```
 
+## Database layout (Prisma + Alembic)
+
+This repo runs **two migrators against one Postgres database**, isolated by schema:
+
+| Schema | Owner | Tables |
+|---|---|---|
+| `public.*` | Prisma (`app/prisma/schema.prisma`) | `business`, `product`, `order`, `agent_action`, `account`, `session`, `user`, `verification`, `Todo` |
+| `agents.*` | Alembic (`agents/alembic/`) | `memory_*` (5), `agent_events`, `agents`, `business_agents`, `alembic_version` |
+
+Each migrator is configured to ignore the other's schema. **Drift between them is the intended boundary, not a bug.** Do NOT resolve drift by running `prisma db push` — that bypasses the boundary and will drop the agent runtime tables. See `docs/superpowers/specs/2026-04-25-schema-isolation-and-db-safety-design.md`.
+
+### Pulling the schema-isolation change onto an existing dev DB
+
+If you already have a seeded dev DB from before this change, run the helper script. It is idempotent and preserves all data via `ALTER TABLE ... SET SCHEMA`:
+
+```bash
+git pull
+./scripts/apply-agents-schema.sh
+```
+
+The script: pre-checks Postgres, snapshots row counts, runs `alembic upgrade head` (which applies migration `0005_isolate_agents_schema`), verifies every moved table exists under `agents.*`, restarts `agents-api` + worker + beat, re-counts to confirm zero data loss, and re-runs `upsert_registry()`. If any step fails it stops with a red ✗ and a hint — **do not** fall back to `prisma db push`; ping the channel.
+
+For a brand-new clone, no extra step is needed: `./scripts/dev.sh up` runs `agents-init` which already chains the migration.
+
+### If `prisma migrate dev` reports drift
+
+Expected: alembic-owned tables look like drift to Prisma even with the schema allowlist if a teammate's local Prisma is out of date. Fix:
+
+```bash
+cd app && pnpm install && npx prisma generate
+```
+
+If drift persists, write the migration SQL manually and apply with `prisma db execute --file <path.sql>` or `prisma migrate resolve --applied <name>`. Never `prisma db push --accept-data-loss`.
+
 ## Smoke test
 
 ```bash
@@ -117,5 +151,6 @@ app/                      TypeScript frontend (TanStack + Prisma + tRPC)
   src/                    routes, components, server fns
 docs/superpowers/         specs + implementation plans
 scripts/dev.sh            docker compose lifecycle wrapper
+scripts/apply-agents-schema.sh   one-shot teammate migration helper for the schema-isolation change
 docker-compose.yml        full dev stack
 ```
