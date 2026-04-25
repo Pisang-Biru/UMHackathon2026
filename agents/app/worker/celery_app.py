@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,6 +28,10 @@ celery.conf.update(
         "expire-pending-orders": {
             "task": "app.worker.tasks.expire_pending_orders",
             "schedule": float(os.environ.get("ORDER_EXPIRY_CHECK_INTERVAL_SEC", "300")),
+        },
+        "prune-agent-events-daily": {
+            "task": "app.worker.tasks.prune_agent_events",
+            "schedule": crontab(hour=3, minute=0),
         },
     },
 )
