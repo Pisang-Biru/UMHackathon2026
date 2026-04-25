@@ -1,16 +1,27 @@
+// Display fallbacks ONLY. The single source of truth for the agent roster is
+// the backend `/agent/registry` endpoint (populated at boot from each agent
+// module's Python `AGENT_META` constant). To add a new agent: declare
+// `AGENT_META = {"id","name","role","icon"}` at the top of your
+// `agents/app/agents/<name>.py` — frontend picks it up automatically. Do NOT
+// hand-edit this file when adding agents.
+
 export interface AgentMeta {
   name: string
   color: string
 }
 
-const AGENT_META: Record<string, AgentMeta> = {
-  support: { name: 'Support Agent', color: '#3b7ef8' },
-}
-
 const FALLBACK_COLOR = '#888'
 
+function titleCase(s: string): string {
+  return s
+    .split(/[_\-\s]+/)
+    .filter(Boolean)
+    .map((p) => p[0].toUpperCase() + p.slice(1))
+    .join(' ')
+}
+
 export function getAgentMeta(agentType: string): AgentMeta {
-  return AGENT_META[agentType] ?? { name: agentType, color: FALLBACK_COLOR }
+  return { name: titleCase(agentType), color: FALLBACK_COLOR }
 }
 
 export function getAgentName(agentType: string): string {

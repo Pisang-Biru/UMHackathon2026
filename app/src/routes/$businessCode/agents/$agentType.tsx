@@ -63,7 +63,13 @@ function AgentPage() {
   const { businesses, current, agentType, stats, sidebarAgents } = Route.useLoaderData()
   const search = Route.useSearch()
   const navigate = useNavigate()
-  const meta = getAgentMeta(agentType)
+  // Prefer the registry-sourced row from the sidebar (matches what the
+  // sidebar shows). Fall back to the local titlecase helper if the agent
+  // isn't in the registry yet (e.g., dev mode before boot upsert ran).
+  const fromSidebar = sidebarAgents.find((a) => a.id === agentType)
+  const meta = fromSidebar
+    ? { name: fromSidebar.name, color: fromSidebar.color }
+    : getAgentMeta(agentType)
 
   const [runsRows, setRunsRows] = React.useState<InboxAction[]>([])
   const [runsCursor, setRunsCursor] = React.useState<string | null>(null)
