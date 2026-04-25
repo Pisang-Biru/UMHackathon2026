@@ -1,8 +1,9 @@
 # agents/app/agents/manager_evaluator.py
 import logging
 import time
-from app.schemas.agent_io import StructuredReply, ManagerVerdict
+from app.schemas.agent_io import StructuredReply, ManagerVerdict, ManagerCritique
 from app.agents.manager_gates import run_gates
+from app.agents._json_utils import structured_or_repair
 
 _log = logging.getLogger(__name__)
 
@@ -101,8 +102,22 @@ def make_evaluate_node(llm):
             via = f"gate_{gate_result.gate_num}"
         else:
             prompt = build_evaluator_prompt(state, draft)
-            verdict_obj = await llm.with_structured_output(ManagerVerdict).ainvoke(prompt)
-            via = "llm"
+            try:
+                verdict_obj = await structured_or_repair(llm, prompt, ManagerVerdict)
+                via = "llm"
+            except Exception as e:
+                _log.warning(
+                    "evaluator_parse_failure",
+                    extra={"error": str(e)[:200]},
+                )
+                # Safe fallback: escalate so a human reviews rather than 500ing
+                # the request. Reason slug is greppable for ops.
+                verdict_obj = ManagerVerdict(
+                    verdict="escalate",
+                    critique=ManagerCritique(),
+                    reason="evaluator_parse_failure",
+                )
+                via = "parse_fallback"
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         current = state["iterations"][-1]

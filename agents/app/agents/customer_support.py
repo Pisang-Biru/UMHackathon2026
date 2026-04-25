@@ -30,6 +30,7 @@ from app.memory.formatter import format_search_results
 from typing import Literal as _Lit
 from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
 from app.agents._traced import traced
+from app.agents._json_utils import structured_or_repair
 from app.events import emit
 
 AGENT_META = {
@@ -619,7 +620,7 @@ def build_customer_support_agent(llm):
         ))
         history = [SystemMessage(content=system_prompt), *state["messages"], revision_instruction]
         _orig_msg_count = len(history)
-        response = await llm.with_structured_output(StructuredReply).ainvoke(history)
+        response = await structured_or_repair(llm, history, StructuredReply)
         # message.out — the model's drafted reply body.
         try:
             _out_text = response.reply if hasattr(response, "reply") else None
