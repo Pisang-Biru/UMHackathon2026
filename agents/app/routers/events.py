@@ -12,6 +12,7 @@ from sqlalchemy import select, func
 from app.db import (
     SessionLocal,
     Agent,
+    Business,
     BusinessAgent,
     AgentEvent,
     AgentAction,
@@ -67,6 +68,34 @@ def registry(business_id: str = Query(...)):
             .order_by(Agent.id.asc())
             .all()
         )
+        # Businesses created after process startup have no business_agents
+        # rows (boot-time upsert missed them). Lazy-sync on first hit so the
+        # dashboard/sidebar work without a service restart. Gate on a real
+        # business row first — business_agents has no FK on business_id, so
+        # a raw query param could otherwise create orphan rows for unknown
+        # IDs and return a fake-valid roster.
+        if not rows:
+            exists = (
+                s.query(Business.id).filter(Business.id == business_id).first()
+            )
+            if exists is None:
+                raise HTTPException(status_code=404, detail="business not found")
+            try:
+                from app.agents.registry import upsert_registry
+                upsert_registry(business_ids=[business_id])
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "lazy registry upsert failed for business_id=%s", business_id
+                )
+            else:
+                rows = (
+                    s.query(Agent, BusinessAgent.enabled)
+                    .join(BusinessAgent, BusinessAgent.agent_id == Agent.id)
+                    .filter(BusinessAgent.business_id == business_id)
+                    .order_by(Agent.id.asc())
+                    .all()
+                )
         out = []
         for agent, enabled in rows:
             last = (
