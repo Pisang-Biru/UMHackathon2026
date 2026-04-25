@@ -100,18 +100,13 @@ def _enqueue_from_state(state, action_id: str):
 
 
 def _build_context(business_id: str) -> str:
-    from app.agents.goals_prompt import load_active_goals_block
-
     with SessionLocal() as session:
         business = session.query(Business).filter(Business.id == business_id).first()
         if not business:
             raise ValueError(f"Business {business_id} not found")
         products = session.query(Product).filter(Product.businessId == business_id).all()
-        goals_block = load_active_goals_block(session, business_id)
 
     lines = [f"Business: {business.name}"]
-    if business.mission:
-        lines.append(f"About: {business.mission}")
 
     if products:
         lines.append("\nProducts available (use product id when creating payment links):")
@@ -122,7 +117,7 @@ def _build_context(business_id: str) -> str:
     else:
         lines.append("\nNo products listed yet.")
 
-    return "\n".join(lines) + goals_block
+    return "\n".join(lines)
 
 
 def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: str | None = None) -> tuple[str, str]:
