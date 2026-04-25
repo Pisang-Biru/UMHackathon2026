@@ -1,19 +1,17 @@
-import type { InboxAction } from '#/lib/inbox-logic'
-import type { StatusDay } from '#/lib/agent-stats'
+import type React from 'react'
 import { ActivityChart, BarChart, SuccessRate } from '#/components/dashboard/charts'
+import type { RunRow, RunTotals, RunStatusDay } from '#/lib/agent-run-stats'
 
 interface DashboardTabProps {
-  latestRun: InboxAction | null
-  totals: { total: number; pending: number; approved: number; rejected: number; autoSent: number }
-  autoSendRate: number
-  approvalRate: number
-  avgConfidence: number
-  runActivity: { date: string; count: number }[]
-  statusBreakdown: StatusDay[]
-  confidenceDistribution: { bucket: string; count: number }[]
-  successRate: { date: string; rate: number }[]
-  recent: InboxAction[]
-  onSelectRun: (id: string) => void
+  latestRun: RunRow | null
+  totals: RunTotals
+  cost: { totalUsd: number; totalTokens: number }
+  activity: { date: string; count: number }[]
+  statusBreakdown: RunStatusDay[]
+  avgDurationMs: number
+  recent: RunRow[]
+  customPanel?: React.ReactNode
+  onSelectRun?: (refTable: string, refId: string) => void
 }
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -32,52 +30,40 @@ function normalizeBars(values: number[]): number[] {
 }
 
 export function DashboardTab(props: DashboardTabProps) {
-  const activityBars = normalizeBars(props.runActivity.map((d) => d.count))
-  const confMax = Math.max(1, ...props.confidenceDistribution.map((x) => x.count))
-  const confBars = props.confidenceDistribution.map((b) => ({
-    label: b.bucket,
-    height: (b.count / confMax) * 100,
-    color: '#3b7ef8',
+  const activityBars = normalizeBars(props.activity.map((d) => d.count))
+  const totalsForStatus = props.statusBreakdown.map((d) => d.ok + d.failed + d.skipped)
+  const statusMax = Math.max(1, ...totalsForStatus)
+  const statusBars = props.statusBreakdown.map((d, i) => ({
+    label: d.date.slice(5),
+    height: totalsForStatus[i] === 0 ? 0 : (totalsForStatus[i] / statusMax) * 100,
+    color: '#00c97a',
   }))
-  const successPercent = Math.round(
-    (props.successRate.reduce((a, r) => a + r.rate, 0) / Math.max(1, props.successRate.length)) * 100,
-  )
-  const statusMax = Math.max(
-    1,
-    ...props.statusBreakdown.map((x) => x.pending + x.approved + x.rejected + x.autoSent),
-  )
-  const statusBars = props.statusBreakdown.map((d) => {
-    const total = d.pending + d.approved + d.rejected + d.autoSent
-    return {
-      label: d.date.slice(5),
-      height: total === 0 ? 0 : (total / statusMax) * 100,
-      color: '#00c97a',
-    }
-  })
+  const successPercent = props.totals.runs === 0 ? 0 : Math.round((props.totals.ok / props.totals.runs) * 100)
 
   return (
     <div className="p-8 overflow-auto flex flex-col gap-6">
       {props.latestRun && (
         <div className="rounded-xl p-4" style={{ background: '#161618', border: '1px solid #1e1e24' }}>
           <p className="text-[10px] uppercase tracking-[0.14em] mb-2" style={{ color: '#555', fontFamily: 'var(--font-mono)' }}>Latest run</p>
-          <p className="text-[13px] mb-1" style={{ color: '#e8e6e2' }}>{props.latestRun.customerMsg}</p>
+          <p className="text-[13px] mb-1" style={{ color: '#e8e6e2' }}>{props.latestRun.summary}</p>
           <p className="text-[11px]" style={{ color: '#666', fontFamily: 'var(--font-mono)' }}>
-            {props.latestRun.status} · conf {props.latestRun.confidence.toFixed(2)} · {new Date(props.latestRun.createdAt).toLocaleString()}
+            {props.latestRun.kind} · {props.latestRun.status} · {new Date(props.latestRun.createdAt).toLocaleString()}
           </p>
         </div>
       )}
 
+      {props.customPanel}
+
       <div className="grid grid-cols-4 gap-3">
-        <StatTile label="Total runs" value={String(props.totals.total)} sub={`${props.totals.pending} pending`} />
-        <StatTile label="Auto-send rate" value={`${Math.round(props.autoSendRate * 100)}%`} />
-        <StatTile label="Approval rate" value={`${Math.round(props.approvalRate * 100)}%`} sub={`${props.totals.approved} / ${props.totals.approved + props.totals.rejected}`} />
-        <StatTile label="Avg confidence" value={props.avgConfidence.toFixed(2)} />
+        <StatTile label="Total runs" value={String(props.totals.runs)} sub={`${props.totals.failed} failed`} />
+        <StatTile label="Success rate" value={`${successPercent}%`} sub={`${props.totals.ok} / ${props.totals.runs}`} />
+        <StatTile label="Avg cost" value={props.totals.runs === 0 ? '$0' : `$${(props.cost.totalUsd / props.totals.runs).toFixed(4)}`} sub={`$${props.cost.totalUsd.toFixed(4)} total`} />
+        <StatTile label="Avg duration" value={`${props.avgDurationMs} ms`} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <ActivityChart bars={activityBars} />
-        <BarChart bars={statusBars} title="Status breakdown" />
-        <BarChart bars={confBars} title="Confidence distribution" />
+        <BarChart bars={statusBars} title="Run status breakdown" />
         <SuccessRate percent={successPercent} />
       </div>
 
@@ -88,20 +74,24 @@ export function DashboardTab(props: DashboardTabProps) {
         {props.recent.length === 0 ? (
           <p className="px-4 py-6 text-[12px]" style={{ color: '#444' }}>No runs yet</p>
         ) : (
-          props.recent.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => props.onSelectRun(r.id)}
-              className="w-full text-left px-4 py-2.5 border-b flex items-center gap-3 hover:bg-white/5"
-              style={{ borderColor: '#1a1a1e' }}
-            >
-              <span className="text-[10px] w-16 shrink-0" style={{ color: '#555', fontFamily: 'var(--font-mono)' }}>
-                {new Date(r.createdAt).toLocaleDateString()}
-              </span>
-              <span className="text-[13px] truncate flex-1" style={{ color: '#c8c5c0' }}>{r.customerMsg}</span>
-              <span className="text-[10px] shrink-0" style={{ color: '#666', fontFamily: 'var(--font-mono)' }}>{r.status}</span>
-            </button>
-          ))
+          props.recent.map((r) => {
+            const clickable = !!(r.refTable && r.refId && props.onSelectRun)
+            const Cmp: any = clickable ? 'button' : 'div'
+            return (
+              <Cmp
+                key={r.id}
+                {...(clickable ? { onClick: () => props.onSelectRun!(r.refTable!, r.refId!) } : {})}
+                className={`w-full text-left px-4 py-2.5 border-b flex items-center gap-3 ${clickable ? 'hover:bg-white/5' : ''}`}
+                style={{ borderColor: '#1a1a1e' }}
+              >
+                <span className="text-[10px] w-16 shrink-0" style={{ color: '#555', fontFamily: 'var(--font-mono)' }}>
+                  {new Date(r.createdAt).toLocaleDateString()}
+                </span>
+                <span className="text-[13px] truncate flex-1" style={{ color: '#c8c5c0' }}>{r.summary}</span>
+                <span className="text-[10px] shrink-0" style={{ color: '#666', fontFamily: 'var(--font-mono)' }}>{r.status}</span>
+              </Cmp>
+            )
+          })
         )}
       </div>
     </div>
