@@ -22,6 +22,8 @@ function order(partial: Partial<SalesOrder>): SalesOrder {
     totalAmount: 10,
     buyerName: 'Ali',
     buyerContact: '012-3456789',
+    realMargin: null,
+    marginStatus: null,
     ...partial,
   }
 }

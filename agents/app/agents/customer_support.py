@@ -162,6 +162,8 @@ def _create_cart(
     product_ids_for_reindex: list[str] = []
 
     with SessionLocal() as session:
+        business = session.query(Business).filter(Business.id == business_id).first()
+        default_transport = business.defaultTransportCost if business else None
         for product_id, qty in norm:
             product = session.query(Product).filter(
                 Product.id == product_id,
@@ -199,6 +201,7 @@ def _create_cart(
                 buyerContact=buyer_contact or None,
                 paymentUrl=payment_url,
                 groupId=group_id,
+                transportCost=default_transport,
             )
             session.add(order)
             lines.append({

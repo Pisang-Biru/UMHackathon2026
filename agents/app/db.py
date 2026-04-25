@@ -24,12 +24,28 @@ class AgentActionStatus(enum.Enum):
     AUTO_SENT = "AUTO_SENT"
 
 
+class MarginStatus(enum.Enum):
+    OK = "OK"
+    LOSS = "LOSS"
+    MISSING_DATA = "MISSING_DATA"
+
+
+class FinanceAlertKind(enum.Enum):
+    LOSS = "LOSS"
+    MISSING_DATA = "MISSING_DATA"
+
+
 class Business(Base):
     __tablename__ = "business"
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
     code = Column(String, unique=True, nullable=False)
     mission = Column(Text, nullable=True)
+    userId = Column(String, nullable=False)
+    platformFeePct = Column(Numeric(5, 4), nullable=False, server_default=text("0.05"))
+    defaultTransportCost = Column(Numeric(10, 2), nullable=False, server_default=text("0"))
+    createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Product(Base):
@@ -40,6 +56,8 @@ class Product(Base):
     stock = Column(Integer, nullable=False, default=0)
     description = Column(Text, nullable=True)
     businessId = Column(String, nullable=False)
+    cogs = Column(Numeric(10, 2), nullable=True)
+    packagingCost = Column(Numeric(10, 2), nullable=True)
     createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -93,8 +111,25 @@ class Order(Base):
     groupId = Column(String, nullable=True)
     paidAt = Column(DateTime, nullable=True)
     acknowledgedAt = Column(DateTime, nullable=True)
+    transportCost = Column(Numeric(10, 2), nullable=True)
+    realMargin = Column(Numeric(10, 2), nullable=True)
+    marginStatus = Column(SAEnum(MarginStatus, name="MarginStatus"), nullable=True)
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class FinanceAlert(Base):
+    __tablename__ = "finance_alert"
+    id = Column(String, primary_key=True)
+    businessId = Column(String, ForeignKey("business.id", ondelete="CASCADE"), nullable=False)
+    orderId = Column(String, ForeignKey("order.id", ondelete="CASCADE"), nullable=True)
+    productId = Column(String, ForeignKey("product.id", ondelete="CASCADE"), nullable=True)
+    kind = Column(SAEnum(FinanceAlertKind, name="FinanceAlertKind"), nullable=False)
+    marginValue = Column(Numeric(10, 2), nullable=True)
+    message = Column(Text, nullable=False)
+    resolvedAt = Column(DateTime, nullable=True)
+    createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Agent(Base):

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from app.db import SessionLocal, AgentAction, AgentActionStatus
 from app.memory.phone import normalize_phone
+from app.agents.finance.agent import is_finance_intent
 from typing import Optional
 
 
@@ -108,6 +109,20 @@ def make_support_router(support_graph):
     @router.post("/support/chat", response_model=SupportChatResponse)
     async def support_chat(req: SupportChatRequest):
         try:
+            if is_finance_intent(req.message):
+                from app.routers.finance import _finance_graph
+                state = {
+                    "business_id": req.business_id,
+                    "messages": [HumanMessage(content=req.message)],
+                }
+                fin_out = await _finance_graph.ainvoke(state)
+                fin_last = fin_out["messages"][-1]
+                return SupportChatResponse(
+                    status="auto_send",
+                    reply=getattr(fin_last, "content", ""),
+                    confidence=0.9,
+                )
+
             result = await _support_graph_ainvoke({
                 "messages": [HumanMessage(content=req.message)],
                 "business_id": req.business_id,

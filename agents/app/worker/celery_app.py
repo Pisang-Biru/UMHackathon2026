@@ -10,7 +10,7 @@ BROKER_URL = os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@localhost:5
 celery = Celery(
     "pisang_agents",
     broker=BROKER_URL,
-    include=["app.worker.tasks"],
+    include=["app.worker.tasks", "app.worker.finance_check"],
 )
 
 celery.conf.update(

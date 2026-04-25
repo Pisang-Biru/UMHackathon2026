@@ -3,6 +3,7 @@ import { redirect } from '@tanstack/react-router'
 import { prisma } from '#/db'
 import { auth } from '#/lib/auth'
 import { enqueueProductReindex } from '#/lib/agents-reindex'
+import { triggerFinanceCheck } from './finance-server-fns'
 
 async function requireSession() {
   const { getRequest } = await import('@tanstack/react-start/server')
@@ -116,6 +117,7 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
       return { updated: [updated], productIds: [order.productId] }
     })
     for (const pid of result.productIds) enqueueProductReindex(pid)
+    for (const o of result.updated) void triggerFinanceCheck(o.id)
     // Return the first row in legacy serialized shape so existing callers keep working.
     return serializeOrder(result.updated[0])
   })
