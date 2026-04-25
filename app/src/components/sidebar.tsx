@@ -1,7 +1,20 @@
 import React from 'react'
 import {
-  LayoutDashboard, CircleDot, RefreshCw, Target,
-  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag, Inbox, TrendingUp,
+  LayoutDashboard,
+  CircleDot,
+  RefreshCw,
+  Target,
+  Building2,
+  Brain,
+  Wheat,
+  Settings,
+  ChevronDown,
+  Plus,
+  LogOut,
+  ShoppingBag,
+  Inbox,
+  TrendingUp,
+  Instagram,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -9,6 +22,7 @@ import { ScrollArea } from '#/components/ui/scroll-area'
 import { Separator } from '#/components/ui/separator'
 import { authClient } from '#/lib/auth-client'
 import { fetchTabCounts } from '#/lib/inbox-server-fns'
+import { fetchInstagramStatus } from '#/lib/instagram-server-fns'
 
 interface Agent {
   id: string
@@ -46,10 +60,20 @@ const PRODUCT_ITEMS = [
 ]
 
 function initials(name: string): string {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
 }
 
-export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps) {
+export function Sidebar({
+  business,
+  agents = [],
+  activeAgentType,
+}: SidebarProps) {
   const navigate = useNavigate()
   const [signingOut, setSigningOut] = React.useState(false)
 
@@ -61,6 +85,13 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
     staleTime: 10_000,
   })
   const unread = tabCounts?.unread ?? 0
+
+  const { data: igStatus, isLoading: igStatusLoading } = useQuery({
+    queryKey: ['instagram-status', business.id],
+    queryFn: () => fetchInstagramStatus({ data: { businessId: business.id } }),
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+  })
 
   async function handleSignOut() {
     if (signingOut) return
@@ -78,16 +109,21 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
       className="w-[210px] shrink-0 flex flex-col h-full"
       style={{ background: '#0c0c0f', borderRight: '1px solid #1a1a1e' }}
     >
-      {/* Business selector */}
       <div className="px-3 py-3 border-b" style={{ borderColor: '#1a1a1e' }}>
         <button className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
           <div
             className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center text-[8px] font-bold text-white shrink-0"
-            style={{ background: 'linear-gradient(135deg, #3b7ef8, #00c97a)', fontFamily: 'var(--font-mono)' }}
+            style={{
+              background: 'linear-gradient(135deg, #3b7ef8, #00c97a)',
+              fontFamily: 'var(--font-mono)',
+            }}
           >
             {initials(business.name)}
           </div>
-          <span className="flex-1 text-left text-[13px] font-semibold truncate" style={{ color: '#e8e6e2', fontFamily: 'var(--font-display)' }}>
+          <span
+            className="flex-1 text-left text-[13px] font-semibold truncate"
+            style={{ color: '#e8e6e2', fontFamily: 'var(--font-display)' }}
+          >
             {business.name}
           </span>
           <ChevronDown size={11} style={{ color: '#333338' }} />
@@ -96,7 +132,6 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
 
       <ScrollArea className="flex-1">
         <div className="px-2 py-2">
-          {/* Main nav */}
           <div className="space-y-0.5 mb-4">
             {NAV_ITEMS.map((item) => {
               const isInbox = 'route' in item && item.route === 'inbox'
@@ -107,7 +142,10 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
                   className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5 relative"
                   onClick={() => {
                     if ('route' in item && item.route) {
-                      navigate({ to: '/$businessCode/' + item.route as any, params: { businessCode: business.code } } as any)
+                      navigate({
+                        to: ('/$businessCode/' + item.route) as any,
+                        params: { businessCode: business.code },
+                      } as any)
                     }
                   }}
                   style={{
@@ -121,7 +159,8 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
                         className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full"
                         style={{
                           background: '#ff3b5c',
-                          boxShadow: '0 0 0 2px #0c0c0f, 0 0 8px rgba(255,59,92,0.7)',
+                          boxShadow:
+                            '0 0 0 2px #0c0c0f, 0 0 8px rgba(255,59,92,0.7)',
                           animation: 'pulse-dot 1.6s ease-in-out infinite',
                         }}
                       />
@@ -132,11 +171,13 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
                     <span
                       className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none tabular-nums"
                       style={{
-                        background: 'linear-gradient(135deg, #ff3b5c 0%, #ff6b35 100%)',
+                        background:
+                          'linear-gradient(135deg, #ff3b5c 0%, #ff6b35 100%)',
                         color: '#fff',
                         fontFamily: 'var(--font-mono)',
                         letterSpacing: '0.02em',
-                        boxShadow: '0 0 12px rgba(255,59,92,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+                        boxShadow:
+                          '0 0 12px rgba(255,59,92,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
                         minWidth: '16px',
                         textAlign: 'center',
                       }}
@@ -147,7 +188,11 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
                   {!showUnread && item.count != null && (
                     <span
                       className="text-[9px] px-1.5 py-0.5 rounded-full"
-                      style={{ background: '#1a1a1f', color: '#444', fontFamily: 'var(--font-mono)' }}
+                      style={{
+                        background: '#1a1a1f',
+                        color: '#444',
+                        fontFamily: 'var(--font-mono)',
+                      }}
                     >
                       {item.count}
                     </span>
@@ -159,7 +204,40 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
 
           <Separator style={{ background: '#1a1a1e' }} className="my-2" />
 
-          {/* Agents section */}
+          <p
+            className="text-[9px] uppercase tracking-[0.14em] px-2.5 mb-1.5"
+            style={{ color: '#252530', fontFamily: 'var(--font-mono)' }}
+          >
+            Channels
+          </p>
+          <div className="space-y-0.5 mb-4">
+            <button
+              onClick={() =>
+                navigate({
+                  to: '/$businessCode/channels/instagram',
+                  params: { businessCode: business.code },
+                } as any)
+              }
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
+              style={{ color: igStatus?.connected ? '#e8e6e2' : '#555' }}
+            >
+              <Instagram size={13} />
+              <span className="flex-1 text-left">Instagram</span>
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: igStatus?.connected ? '#063d2a' : '#1a1a1f',
+                  color: igStatus?.connected ? '#00c97a' : '#444',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {igStatusLoading ? '...' : igStatus?.connected ? 'on' : 'setup'}
+              </span>
+            </button>
+          </div>
+
+          <Separator style={{ background: '#1a1a1e' }} className="my-2" />
+
           <p
             className="text-[9px] uppercase tracking-[0.14em] px-2.5 mb-1.5"
             style={{ color: '#252530', fontFamily: 'var(--font-mono)' }}
@@ -172,26 +250,41 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
               return (
                 <button
                   key={agent.id}
-                  onClick={() => navigate({
-                    to: '/$businessCode/agents/$agentType',
-                    params: { businessCode: business.code, agentType: agent.id },
-                  } as any)}
+                  onClick={() =>
+                    navigate({
+                      to: '/$businessCode/agents/$agentType',
+                      params: {
+                        businessCode: business.code,
+                        agentType: agent.id,
+                      },
+                    } as any)
+                  }
                   className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
                   style={{
                     color: active ? '#e8e6e2' : '#555',
                     background: active ? '#16161a' : 'transparent',
-                    border: active ? '1px solid #1e1e24' : '1px solid transparent',
+                    border: active
+                      ? '1px solid #1e1e24'
+                      : '1px solid transparent',
                   }}
                 >
                   <div
                     className="w-3 h-3 rounded-full shrink-0"
-                    style={{ background: agent.color + '25', border: `1.5px solid ${agent.color}50` }}
+                    style={{
+                      background: agent.color + '25',
+                      border: `1.5px solid ${agent.color}50`,
+                    }}
                   />
-                  <span className="flex-1 text-left truncate">{agent.name}</span>
+                  <span className="flex-1 text-left truncate">
+                    {agent.name}
+                  </span>
                   {agent.live && (
                     <span
                       className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ background: '#00c97a', animation: 'pulse-dot 1.8s ease-in-out infinite' }}
+                      style={{
+                        background: '#00c97a',
+                        animation: 'pulse-dot 1.8s ease-in-out infinite',
+                      }}
                     />
                   )}
                 </button>
@@ -208,7 +301,6 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
 
           <Separator style={{ background: '#1a1a1e' }} className="my-2" />
 
-          {/* Products section */}
           <p
             className="text-[9px] uppercase tracking-[0.14em] px-2.5 mb-1.5"
             style={{ color: '#252530', fontFamily: 'var(--font-mono)' }}
@@ -230,8 +322,17 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
         </div>
       </ScrollArea>
 
-      <div className="px-2 py-2 border-t flex flex-col gap-0.5" style={{ borderColor: '#1a1a1e' }}>
+      <div
+        className="px-2 py-2 border-t flex flex-col gap-2"
+        style={{ borderColor: '#1a1a1e' }}
+      >
         <button
+          onClick={() =>
+            navigate({
+              to: '/$businessCode/settings',
+              params: { businessCode: business.code },
+            } as any)
+          }
           className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
           style={{ color: '#555' }}
         >
@@ -245,7 +346,7 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
           style={{ color: '#555' }}
         >
           <LogOut size={13} />
-          <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
+          <span>{signingOut ? 'Signing out...' : 'Sign out'}</span>
         </button>
       </div>
     </aside>

@@ -65,7 +65,10 @@ def build_escalation_summary(state: dict) -> str:
     iters = state.get("iterations", [])
     if not iters:
         return "Needs your review."
-    last_verdict = iters[-1].verdict
+    last_entry = iters[-1]
+    if last_entry.stage == "marketing_v1" and last_entry.draft and last_entry.draft.needs_human:
+        return last_entry.draft.reply
+    last_verdict = last_entry.verdict
     if last_verdict and last_verdict.verdict == "escalate":
         return humanize_reason(last_verdict.reason)
     # gates_only_check path after rewrite hallucinated
@@ -98,4 +101,9 @@ def jual_v1_reply(state: dict) -> str:
 
 def jual_v1_confidence(state: dict) -> float:
     entry = _by_stage(state).get("jual_v1")
-    return entry.draft.confidence if entry and entry.draft else 0.0
+    if entry and entry.draft:
+        return entry.draft.confidence
+    mkt = _by_stage(state).get("marketing_v1")
+    if mkt and mkt.draft:
+        return mkt.draft.confidence
+    return 0.0

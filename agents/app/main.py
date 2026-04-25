@@ -72,6 +72,9 @@ app.include_router(events_router)
 from app.routers.finance import router as finance_router
 app.include_router(finance_router)
 
+from app.routers.instagram import router as instagram_router
+app.include_router(instagram_router)
+
 
 @app.get("/health")
 def health():

@@ -33,7 +33,7 @@ class ManagerVerdict(BaseModel):
 
 
 class IterationEntry(BaseModel):
-    stage: Literal["jual_v1", "jual_v2", "manager_rewrite"]
+    stage: Literal["jual_v1", "jual_v2", "manager_rewrite", "marketing_v1"]
     draft: StructuredReply | None = None
     verdict: ManagerVerdict | None = None
     gate_results: dict = Field(default_factory=dict)

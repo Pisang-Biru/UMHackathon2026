@@ -19,6 +19,7 @@ import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/in
 import { Route as BusinessCodeGoalsRouteImport } from './routes/$businessCode/goals'
 import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as BusinessCodeChannelsInstagramRouteImport } from './routes/$businessCode/channels/instagram'
 import { Route as BusinessCodeAgentsAgentTypeRouteImport } from './routes/$businessCode/agents/$agentType'
 
 const LoginRoute = LoginRouteImport.update({
@@ -71,6 +72,12 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BusinessCodeChannelsInstagramRoute =
+  BusinessCodeChannelsInstagramRouteImport.update({
+    id: '/$businessCode/channels/instagram',
+    path: '/$businessCode/channels/instagram',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const BusinessCodeAgentsAgentTypeRoute =
   BusinessCodeAgentsAgentTypeRouteImport.update({
     id: '/$businessCode/agents/$agentType',
@@ -89,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
+  '/$businessCode/channels/instagram': typeof BusinessCodeChannelsInstagramRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
@@ -102,6 +110,7 @@ export interface FileRoutesByTo {
   '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
+  '/$businessCode/channels/instagram': typeof BusinessCodeChannelsInstagramRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
@@ -116,6 +125,7 @@ export interface FileRoutesById {
   '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
+  '/$businessCode/channels/instagram': typeof BusinessCodeChannelsInstagramRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
+    | '/$businessCode/channels/instagram'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
+    | '/$businessCode/channels/instagram'
     | '/api/auth/$'
   id:
     | '__root__'
@@ -157,6 +169,7 @@ export interface FileRouteTypes {
     | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
+    | '/$businessCode/channels/instagram'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
@@ -171,6 +184,7 @@ export interface RootRouteChildren {
   BusinessCodeSettingsRoute: typeof BusinessCodeSettingsRoute
   PayOrderIdRoute: typeof PayOrderIdRoute
   BusinessCodeAgentsAgentTypeRoute: typeof BusinessCodeAgentsAgentTypeRoute
+  BusinessCodeChannelsInstagramRoute: typeof BusinessCodeChannelsInstagramRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -246,6 +260,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/channels/instagram': {
+      id: '/$businessCode/channels/instagram'
+      path: '/$businessCode/channels/instagram'
+      fullPath: '/$businessCode/channels/instagram'
+      preLoaderRoute: typeof BusinessCodeChannelsInstagramRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$businessCode/agents/$agentType': {
       id: '/$businessCode/agents/$agentType'
       path: '/$businessCode/agents/$agentType'
@@ -267,6 +288,7 @@ const rootRouteChildren: RootRouteChildren = {
   BusinessCodeSettingsRoute: BusinessCodeSettingsRoute,
   PayOrderIdRoute: PayOrderIdRoute,
   BusinessCodeAgentsAgentTypeRoute: BusinessCodeAgentsAgentTypeRoute,
+  BusinessCodeChannelsInstagramRoute: BusinessCodeChannelsInstagramRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport

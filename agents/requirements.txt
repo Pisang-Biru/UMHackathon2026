@@ -5,7 +5,7 @@ langchain==1.2.15
 langchain-openai==1.1.16
 langchain-anthropic==1.4.1
 python-dotenv==1.2.2
-pydantic==2.13.3
+pydantic==2.13.2
 httpx-sse>=0.4.0
 sqlalchemy==2.0.41
 psycopg2-binary==2.9.10
@@ -17,3 +17,4 @@ kombu[amqp]==5.4.2
 alembic==1.14.0
 phonenumbers==8.13.50
 redis>=5.0
+instagrapi>=2.2,<3
