@@ -200,7 +200,7 @@ After any tool calls, respond with valid JSON only, no other text:
   "reasoning": "<one sentence explaining your confidence>",
   "addressed_questions": ["<buyer question you answered>", ...],
   "unaddressed_questions": ["<buyer question you did NOT answer, verbatim>", ...],
-  "facts_used": [{{"kind": "product|order|kb|memory", "id": "<id>"}}, ...],
+  "facts_used": [{{"kind": "product|order|kb|memory|memory:past_action|payment_link", "id": "<id>"}}, ...],
   "needs_human": <true only if refund / complaint / out-of-scope, else false>
 }}
 
@@ -208,6 +208,7 @@ Rules for facts_used:
 - If you call create_payment_link, add {{"kind":"product","id":"<product_id>"}}.
 - If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference. If the tool returns "no orders found for this phone", cite {{"kind":"order","id":"none:<digits-only phone>"}} — that is the citable negative.
 - If you quote a product price or stock number, add that product's {{"kind":"product","id":"<id>"}}.
+- If you reference content from search_memory, copy the [id=<short>] marker into facts_used as {{"kind":"<kind>","id":"<short>"}}. For kind="past_action", use {{"kind":"memory:past_action","id":"<short>"}}. For empty results, cite the [id=none:<hash>] marker — that grounds "I checked, found nothing".
 
 Confidence guide (for telemetry only, not routing):
 - 0.9+   : Direct factual answer from product data or tool output
@@ -327,24 +328,62 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
 
 
 def _make_search_memory_tool(business_id: str):
-    @tool
-    def search_memory(query: str, kind: _Lit["kb", "product", "past_action"]) -> str:
+    @tool(response_format="content_and_artifact")
+    def search_memory(query: str, kind: _Lit["kb", "product", "past_action"]) -> tuple[str, list]:
         """Search business memory for context outside of the live conversation.
         Args:
             query: what to search for (buyer's phrasing or a paraphrase)
             kind: "kb" (FAQ/policy docs), "product" (fuzzy product match), or "past_action" (similar past buyer messages)
         Returns a numbered list of top matches with similarity scores, or "No results".
         """
-        q_vec = embed([query])[0]
-        with SessionLocal() as session:
-            if kind == "kb":
-                hits = memory_repo.search_kb(session, business_id, q_vec, k=5, min_sim=0.6)
-            elif kind == "product":
-                hits = memory_repo.search_products(session, business_id, q_vec, k=5, min_sim=0.5)
-            else:
-                hits = memory_repo.search_past_actions(session, business_id, q_vec, k=3, min_sim=0.7)
-        return format_search_results(kind, hits)
+        from app.schemas.agent_io import KbReceipt, ProductReceipt, PastActionReceipt
+        try:
+            q_vec = embed([query])[0]
+            with SessionLocal() as session:
+                if kind == "kb":
+                    hits = memory_repo.search_kb(session, business_id, q_vec, k=5, min_sim=0.6)
+                elif kind == "product":
+                    hits = memory_repo.search_products(session, business_id, q_vec, k=5, min_sim=0.5)
+                else:
+                    hits = memory_repo.search_past_actions(session, business_id, q_vec, k=3, min_sim=0.7)
+            text = format_search_results(kind, hits, query=query)
+            receipts = _build_memory_receipts(kind, hits, query)
+            return _safe_tool_return(text, receipts)
+        except Exception as e:
+            return _error_tool_return(str(e))
     return search_memory
+
+
+def _build_memory_receipts(kind: str, hits, query: str) -> list:
+    """Build receipts mirroring what format_search_results renders."""
+    from app.schemas.agent_io import KbReceipt, ProductReceipt, PastActionReceipt
+
+    hits = list(hits)
+    if not hits:
+        none_id = f"none:{_query_hash8(query)}"
+        if kind == "kb":
+            return [KbReceipt(id=none_id, chunk_id="-", sim=0.0)]
+        if kind == "product":
+            return [ProductReceipt(id=none_id)]
+        # past_action
+        return [PastActionReceipt(id=none_id, full_id="-", sim=0.0)]
+
+    raw_ids = [str(getattr(h, "id", "")) for h in hits]
+    # Match the formatter's collision-bump width.
+    width = 8 if len({_short_id(r, 8) for r in raw_ids}) == len(raw_ids) else 12
+
+    receipts = []
+    for h, raw in zip(hits, raw_ids):
+        sim = float(getattr(h, "similarity", 0.0))
+        if kind == "kb":
+            receipts.append(KbReceipt(id=_short_id(raw, width), chunk_id=raw, sim=sim))
+        elif kind == "product":
+            # Product receipts use the product id directly (already short and stable).
+            pid = str(getattr(h, "productId", raw))
+            receipts.append(ProductReceipt(id=pid))
+        else:
+            receipts.append(PastActionReceipt(id=_short_id(raw, width), full_id=raw, sim=sim))
+    return receipts
 
 
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
@@ -491,7 +530,7 @@ def build_customer_support_agent(llm):
             "Produce the final reply as a single JSON object matching this schema:\n"
             '{"reply": "<text>", "confidence": <float>, "reasoning": "<sentence>", '
             '"addressed_questions": [...], "unaddressed_questions": [...], '
-            '"facts_used": [{"kind":"product|order|kb|memory","id":"<id>"}], '
+            '"facts_used": [{"kind":"product|order|kb|memory|memory:past_action|payment_link","id":"<id>"}], '
             '"needs_human": <bool>}\n'
             "Output ONLY the JSON object. No markdown fences, no prose before or after."
         ))

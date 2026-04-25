@@ -50,3 +50,33 @@ def test_format_search_results_shows_similarity():
 def test_format_search_results_empty():
     out = formatter.format_search_results("kb", [])
     assert "No results" in out
+
+
+def test_format_search_results_surfaces_short_ids_for_kb():
+    from app.memory.formatter import format_search_results
+
+    class _Hit:
+        def __init__(self, _id, content, sim):
+            self.id = _id
+            self.content = content
+            self.similarity = sim
+
+    hits = [
+        _Hit("kb-chunk-aaaaaaaa", "Return policy is 7 days.", 0.82),
+        _Hit("kb-chunk-bbbbbbbb", "Refunds processed within 14 days.", 0.71),
+    ]
+    out = format_search_results("kb", hits)
+    assert "[id=" in out
+    # Two distinct short ids visible
+    import re
+    short_ids = re.findall(r"\[id=([a-f0-9]{8,})\b", out)
+    assert len(short_ids) == 2
+    assert short_ids[0] != short_ids[1]
+
+
+def test_format_search_results_empty_emits_negative_id_marker():
+    from app.memory.formatter import format_search_results
+    out = format_search_results("kb", [], query="return policy")
+    assert "No results" in out
+    assert "[id=none:" in out
+    assert 'for query "return policy"' in out
