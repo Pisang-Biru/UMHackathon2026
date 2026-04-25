@@ -4,11 +4,12 @@
 # What it does (in order):
 #   1. preflight   — confirm postgres is reachable and on the expected layout
 #   2. snapshot    — record row counts of soon-to-be-moved tables, BEFORE
-#   3. migrate     — run `alembic upgrade head` inside agents-api (applies 0005)
-#   4. verify      — confirm tables now live under `agents.*`, not `public.*`
-#   5. restart     — restart agents-api + worker + beat to pick up env.py change
-#   6. recount     — re-snapshot row counts AFTER, diff against BEFORE
-#   7. registry    — re-trigger upsert_registry() so business_agents repopulates
+#   3. bootstrap   — relocate alembic_version into agents schema so env.py finds it
+#   4. migrate     — run `alembic upgrade head` inside agents-api (applies 0005)
+#   5. verify      — confirm tables now live under `agents.*`, not `public.*`
+#   6. restart     — restart agents-api + worker + beat to pick up env.py change
+#   7. recount     — re-snapshot row counts AFTER, diff against BEFORE
+#   8. registry    — re-trigger upsert_registry() so business_agents repopulates
 #
 # Safe to re-run. ALTER TABLE ... SET SCHEMA preserves data, indexes, FKs.
 # If `alembic_version` already shows 0005 applied, the migration is a no-op.
@@ -77,6 +78,42 @@ for t in "${MOVED_TABLES[@]}"; do
   # Source-of-truth: whichever schema currently has the table.
   if [ "$pub" != "-" ]; then before[$t]=$pub; else before[$t]=$agt; fi
 done
+
+# ------------------------------------------------------------------
+# Bootstrap: env.py now points alembic at agents.alembic_version. On a pre-0005
+# DB, the version table still lives in public.alembic_version, so alembic would
+# otherwise see "no version" and try to replay every migration from base —
+# colliding with already-existing public tables. Relocate the version table
+# (and any sequence) up front so alembic finds revision 0004 and applies 0005.
+step "bootstrap: move alembic_version into agents schema if needed"
+$COMPOSE exec -T "$PG_SVC" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+CREATE SCHEMA IF NOT EXISTS agents;
+DO $$
+DECLARE
+  has_public_ver  boolean;
+  has_agents_ver  boolean;
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM information_schema.tables
+                  WHERE table_schema='public' AND table_name='alembic_version')
+    INTO has_public_ver;
+  SELECT EXISTS (SELECT 1 FROM information_schema.tables
+                  WHERE table_schema='agents' AND table_name='alembic_version')
+    INTO has_agents_ver;
+
+  IF has_public_ver AND NOT has_agents_ver THEN
+    EXECUTE 'ALTER TABLE public.alembic_version SET SCHEMA agents';
+    RAISE NOTICE 'moved public.alembic_version -> agents.alembic_version';
+  ELSIF has_public_ver AND has_agents_ver THEN
+    RAISE NOTICE 'alembic_version exists in both schemas — leaving public copy in place; migration 0005 will reconcile';
+  ELSIF has_agents_ver THEN
+    RAISE NOTICE 'agents.alembic_version already present — no bootstrap needed';
+  ELSE
+    RAISE NOTICE 'no alembic_version table found — fresh DB, alembic will create one in agents schema';
+  END IF;
+END
+$$;
+SQL
+ok "alembic_version reachable from agents schema"
 
 # ------------------------------------------------------------------
 step "migrate: alembic upgrade head (applies 0005_isolate_agents_schema)"
