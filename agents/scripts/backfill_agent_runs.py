@@ -27,7 +27,7 @@ def backfill() -> int:
     with SessionLocal() as s:
         actions = s.query(AgentAction).all()
         for a in actions:
-            agent_type = getattr(a, "agentType", None) or "support"
+            agent_type = a.agentType or "support"
             if agent_type not in _LEGACY_AGENT_TYPES:
                 continue
             mapped = _STATUS_FROM_ACTION.get(a.status)
@@ -43,10 +43,10 @@ def backfill() -> int:
                     summary=(a.customerMsg or "")[:200],
                     status=mapped,
                     durationMs=None,
-                    inputTokens=getattr(a, "inputTokens", None),
-                    outputTokens=getattr(a, "outputTokens", None),
-                    cachedTokens=getattr(a, "cachedTokens", None),
-                    costUsd=getattr(a, "costUsd", None),
+                    inputTokens=a.inputTokens,
+                    outputTokens=a.outputTokens,
+                    cachedTokens=a.cachedTokens,
+                    costUsd=a.costUsd,
                     payload={"confidence": float(a.confidence)},
                     refTable="agent_action",
                     refId=a.id,

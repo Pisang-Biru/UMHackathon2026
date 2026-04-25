@@ -76,3 +76,35 @@ def test_backfill_is_idempotent(session):
     assert inserted_first >= 1
     assert inserted_second == 0
     assert len(rows) == 1
+
+
+def test_backfill_preserves_manager_agent_type(session):
+    from app.db import AgentAction, AgentActionStatus, AgentRun
+    from cuid2 import Cuid as _Cuid
+    _cuid = _Cuid().generate
+
+    support_id = _cuid()
+    manager_id = _cuid()
+    session.add_all([
+        AgentAction(
+            id=support_id, businessId="biz1", customerMsg="s",
+            draftReply="d", confidence=0.5, reasoning="r",
+            status=AgentActionStatus.AUTO_SENT, agentType="customer_support",
+        ),
+        AgentAction(
+            id=manager_id, businessId="biz1", customerMsg="m",
+            draftReply="d", confidence=0.5, reasoning="r",
+            status=AgentActionStatus.AUTO_SENT, agentType="manager",
+        ),
+    ])
+    session.commit()
+
+    from scripts.backfill_agent_runs import backfill
+    backfill()
+
+    by_ref = {
+        r.refId: r.agentType
+        for r in session.query(AgentRun).filter_by(refTable="agent_action").all()
+    }
+    assert by_ref[support_id] == "customer_support"
+    assert by_ref[manager_id] == "manager"
