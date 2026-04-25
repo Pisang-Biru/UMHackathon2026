@@ -108,3 +108,54 @@ def test_traced_extracts_reasoning_from_critique():
     assert "price" in reasoning
     assert "tone_issues" in reasoning
     assert "too curt" in reasoning
+
+
+import asyncio
+
+
+def test_traced_wraps_async_fn_preserving_coroutine():
+    calls = []
+
+    def fake_emit(agent_id, kind, **kw):
+        calls.append((kind, kw))
+
+    with patch("app.agents._traced.emit", side_effect=fake_emit):
+        @traced(agent_id="a", node="async_node")
+        async def node_fn(state):
+            await asyncio.sleep(0)
+            return {"verdict": "revise"}
+
+        out = asyncio.get_event_loop().run_until_complete(
+            node_fn({"business_id": "b", "conversation_id": "c"})
+        ) if False else asyncio.new_event_loop().run_until_complete(
+            node_fn({"business_id": "b", "conversation_id": "c"})
+        )
+
+    assert out == {"verdict": "revise"}
+    kinds = [k for k, _ in calls]
+    assert kinds == ["node.start", "node.end"]
+    assert calls[-1][1]["status"] == "revise"
+
+
+def test_traced_async_fn_reraises_on_exception():
+    calls = []
+
+    def fake_emit(agent_id, kind, **kw):
+        calls.append((kind, kw))
+
+    with patch("app.agents._traced.emit", side_effect=fake_emit):
+        @traced(agent_id="a", node="async_node")
+        async def node_fn(state):
+            raise RuntimeError("async boom")
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(node_fn({"business_id": "b", "conversation_id": "c"}))
+            assert False, "should have raised"
+        except RuntimeError as e:
+            assert str(e) == "async boom"
+        finally:
+            loop.close()
+
+    assert calls[-1][1]["status"] == "error"
+    assert "async boom" in (calls[-1][1]["summary"] or "")
