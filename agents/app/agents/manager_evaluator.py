@@ -89,6 +89,7 @@ def make_evaluate_node(llm):
             preloaded_fact_ids=state.get("preloaded_fact_ids", set()),
             revision_count=state.get("revision_count", 0),
             messages=state.get("messages", []),
+            tool_calls_this_turn=state.get("tool_calls_this_turn", 0),
         )
         t0 = time.monotonic()
         if gate_result.verdict is not None:

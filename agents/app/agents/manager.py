@@ -40,6 +40,7 @@ class ManagerState(TypedDict, total=False):
     valid_fact_ids: set[str]
     preloaded_fact_ids: set[str]      # snapshot of pre-tool-call ids; never mutated after load
     last_harvested_msg_index: int     # cursor for harvest_receipts; init 0
+    tool_calls_this_turn: int         # ToolMessages observed by last harvest; reset each turn
     jual_draft: StructuredReply | None
     verdict: Literal["pass", "revise", "rewrite", "escalate"] | None
     critique: ManagerCritique | None
@@ -59,19 +60,26 @@ async def _harvest_receipts_impl(state: dict) -> dict:
 
     Plain @tool returns produce ToolMessage with artifact=None — harvest no-ops on
     those, allowing tools to migrate one at a time.
+
+    Also counts ToolMessages in the new slice as `tool_calls_this_turn`. This
+    lets Gate 5 distinguish "tool fired, returned empty" (negative answer is
+    grounded) from "no tool fired" (truly ungrounded).
     """
     from langchain_core.messages import ToolMessage
     msgs = state.get("messages", []) or []
     start = state.get("last_harvested_msg_index", 0)
     new_ids = set(state.get("valid_fact_ids", set()))
+    tool_calls = 0
     for msg in msgs[start:]:
         if not isinstance(msg, ToolMessage):
             continue
+        tool_calls += 1
         for r in (getattr(msg, "artifact", None) or []):
             new_ids.add(f"{r.kind}:{r.id}")
     return {
         "valid_fact_ids": new_ids,
         "last_harvested_msg_index": len(msgs),
+        "tool_calls_this_turn": tool_calls,
     }
 
 

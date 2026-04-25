@@ -53,6 +53,37 @@ def test_gate5b_ungrounded_factual_rewrites_v2():
     assert r.verdict == "rewrite"
 
 
+def test_gate5_empty_tool_result_is_grounded_negative_answer():
+    """When a tool fired but returned no artifacts, a negative answer
+    (no facts cited) must be treated as grounded — not escalated."""
+    d = _draft(facts_used=[])
+    r = run_gates(
+        d,
+        valid_fact_ids=set(),
+        preloaded_fact_ids=set(),
+        revision_count=0,
+        messages=_msgs("saya ada beli apa-apa harini?"),
+        tool_calls_this_turn=1,
+    )
+    assert r.verdict is None
+    assert "factual_q_grounded_via_empty_lookup" in r.passed_gates
+
+
+def test_gate5_no_tool_no_facts_still_escalates():
+    """Sanity: when no tool fires AND no facts cited, behavior unchanged."""
+    d = _draft(facts_used=[])
+    r = run_gates(
+        d,
+        valid_fact_ids=set(),
+        preloaded_fact_ids=set(),
+        revision_count=0,
+        messages=_msgs("berapa harga ondeh?"),
+        tool_calls_this_turn=0,
+    )
+    assert r.verdict == "revise"
+    assert r.reason_slug == "ungrounded_factual_answer"
+
+
 def test_precedence_needs_human_beats_hallucinated():
     d = _draft(needs_human=True, facts_used=[FactRef(kind="product", id="ghost")])
     r = run_gates(d, valid_fact_ids=set(), revision_count=0, messages=_msgs("hi"))

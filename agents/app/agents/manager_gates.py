@@ -44,6 +44,7 @@ def run_gates(
     revision_count: int,
     messages: list[BaseMessage],
     preloaded_fact_ids: set[str] | None = None,
+    tool_calls_this_turn: int = 0,
 ) -> GateResult:
     """Run gates against a draft.
 
@@ -97,28 +98,42 @@ def run_gates(
         )
     passed.append("unaddressed")
 
-    # Gate 5 — factual question without grounding
+    # Gate 5 — factual question without grounding.
+    #
+    # A tool firing this turn IS the grounding act, even if it returned no
+    # artifacts. "I queried orders and you have none" is a grounded
+    # negative answer — `facts_used == []` is correct in that case. We
+    # distinguish three sub-cases by combining `tool_calls_this_turn`
+    # (any tool fired) and `added_this_turn` (any new fact id harvested):
+    #   tool_calls=0, added=0 -> truly ungrounded (revise/rewrite).
+    #   tool_calls>0, added>0 -> tool produced data but draft didn't cite
+    #                            it (uncited_tool_result; revise/rewrite).
+    #   tool_calls>0, added=0 -> tool fired but returned empty; pass.
     buyer_msg = _last_human_text(messages)
     if FACTUAL_Q_RE.search(buyer_msg) and not draft.facts_used:
         added_this_turn = valid_fact_ids - preloaded_fact_ids
-        had_retrieval = bool(added_this_turn)
-        base = "uncited_tool_result" if had_retrieval else "ungrounded_factual_answer"
-        if revision_count == 0:
+        if tool_calls_this_turn > 0 and not added_this_turn:
+            # Tool ran, returned empty — negative answer is grounded.
+            passed.append("factual_q_grounded_via_empty_lookup")
+        else:
+            had_retrieval = bool(added_this_turn)
+            base = "uncited_tool_result" if had_retrieval else "ungrounded_factual_answer"
+            if revision_count == 0:
+                return GateResult(
+                    verdict="revise",
+                    gate_num=5,
+                    reason_slug=base,
+                    critique=ManagerCritique(
+                        missing_facts=[f"grounded data for: {buyer_msg[:80]}"],
+                    ),
+                    passed_gates=passed,
+                )
             return GateResult(
-                verdict="revise",
+                verdict="rewrite",
                 gate_num=5,
-                reason_slug=base,
-                critique=ManagerCritique(
-                    missing_facts=[f"grounded data for: {buyer_msg[:80]}"],
-                ),
+                reason_slug=f"{base}_persists",
                 passed_gates=passed,
             )
-        return GateResult(
-            verdict="rewrite",
-            gate_num=5,
-            reason_slug=f"{base}_persists",
-            passed_gates=passed,
-        )
     passed.append("factual_q_grounded")
 
     return GateResult(verdict=None, passed_gates=passed)
