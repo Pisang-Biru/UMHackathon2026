@@ -115,6 +115,18 @@ curl -s -X POST http://localhost:8000/agent/support/chat \
 
 Expected: a reply in Malay/English, optionally a payment link like `http://localhost:3000/pay/<id>`.
 
+## WhatsApp bridge
+
+Minimal WhatsApp integration now lives in `whatsapp/` and runs as a separate Node service.
+
+```bash
+cd whatsapp
+npm install
+npm run dev
+```
+
+Set `WHATSAPP_BRIDGE_URL=http://localhost:3100` in `app/.env.local` to let the app's new `/$businessCode/whatsapp` page talk to the bridge.
+
 ## Troubleshooting
 
 **`ERROR: old container 'pgvector' is running`** — you have a leftover container from a previous manual setup. Remove it:
