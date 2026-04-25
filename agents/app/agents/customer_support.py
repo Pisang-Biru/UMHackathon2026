@@ -317,6 +317,16 @@ _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
+def _new_tool_messages(history: list[BaseMessage], orig_count: int) -> list[BaseMessage]:
+    """Pick out ToolMessage entries appended to history during the tool loop.
+
+    Filtered up to the manager so harvest_receipts can read tool artifacts.
+    AIMessage tool-call requests and intermediate prompts are intentionally
+    dropped — they're chat scaffolding, not grounding evidence.
+    """
+    return [m for m in history[orig_count:] if isinstance(m, ToolMessage)]
+
+
 def _try_parse_json_reply(text: str):
     """Attempt to extract a StructuredReply from the model's text output.
 
@@ -392,6 +402,7 @@ def build_customer_support_agent(llm):
         )
 
         history: list[BaseMessage] = [SystemMessage(content=system_prompt)] + list(state["messages"])
+        _orig_msg_count = len(history)
 
         for _ in range(3):
             response = await llm_with_tools.ainvoke(history)
@@ -431,6 +442,7 @@ def build_customer_support_agent(llm):
             except Exception:
                 pass
             return {
+                "messages": _new_tool_messages(history, _orig_msg_count),
                 "structured_reply": direct,
                 "draft_reply": direct.reply,
                 "confidence": float(direct.confidence),
@@ -464,6 +476,7 @@ def build_customer_support_agent(llm):
                 except Exception:
                     pass
                 return {
+                    "messages": _new_tool_messages(history, _orig_msg_count),
                     "structured_reply": retry_parsed,
                     "draft_reply": retry_parsed.reply,
                     "confidence": float(retry_parsed.confidence),
@@ -493,6 +506,7 @@ def build_customer_support_agent(llm):
         except Exception:
             pass
         return {
+            "messages": _new_tool_messages(history, _orig_msg_count),
             "structured_reply": fallback,
             "draft_reply": fallback.reply,
             "confidence": 0.0,
@@ -527,6 +541,7 @@ def build_customer_support_agent(llm):
             "Respond with the same JSON schema as before. Emit JSON only."
         ))
         history = [SystemMessage(content=system_prompt), *state["messages"], revision_instruction]
+        _orig_msg_count = len(history)
         response = await llm.with_structured_output(StructuredReply).ainvoke(history)
         # message.out — the model's drafted reply body.
         try:
@@ -542,6 +557,7 @@ def build_customer_support_agent(llm):
         except Exception:
             pass
         return {
+            "messages": _new_tool_messages(history, _orig_msg_count),
             "structured_reply": response,
             "draft_reply": response.reply,
             "confidence": response.confidence,

@@ -188,7 +188,10 @@ def build_manager_graph(*, jual_llm, manager_llm):
             "facts_used_count": len(draft.facts_used),
             "needs_human": draft.needs_human,
         })
+        sub_msgs = result.get("messages", []) or []
+        new_msgs = sub_msgs[len(state["messages"]):]
         return {
+            "messages": new_msgs,
             "jual_draft": draft,
             "iterations": [*state["iterations"], new_entry],
         }
@@ -241,7 +244,10 @@ def build_manager_graph(*, jual_llm, manager_llm):
             "facts_used_count": len(draft.facts_used),
             "needs_human": draft.needs_human,
         })
+        sub_msgs = result.get("messages", []) or []
+        new_msgs = sub_msgs[len(state["messages"]):]
         return {
+            "messages": new_msgs,
             "jual_draft": draft,
             "revision_count": state.get("revision_count", 0) + 1,
             "iterations": [*state["iterations"], new_entry],

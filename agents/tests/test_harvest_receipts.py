@@ -91,3 +91,69 @@ async def test_harvest_handles_multiple_receipts_in_single_artifact():
     }
     out = await _harvest_receipts_impl(state)
     assert out["valid_fact_ids"] == {"kb:ab12cd34", "kb:ef56gh78"}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_jual_propagates_tool_messages_to_manager_state(monkeypatch):
+    """Regression: harvest_receipts is useless unless dispatch_jual copies the
+    subgraph's ToolMessages back into ManagerState.messages."""
+    from app.agents.manager import build_manager_graph
+    from app.schemas.agent_io import StructuredReply, OrderReceipt
+
+    fake_tool_msg = ToolMessage(content="no orders", tool_call_id="c1")
+    fake_tool_msg.artifact = [OrderReceipt(id="none:60123")]
+    fake_draft = StructuredReply(reply="ok", confidence=0.9, reasoning="r")
+
+    class _FakeJualGraph:
+        async def ainvoke(self, sub_state):
+            return {
+                "messages": list(sub_state["messages"]) + [fake_tool_msg],
+                "draft_reply": fake_draft.reply,
+                "structured_reply": fake_draft,
+                "confidence": fake_draft.confidence,
+                "reasoning": fake_draft.reasoning,
+            }
+
+    monkeypatch.setattr(
+        "app.agents.manager.build_customer_support_agent",
+        lambda llm: _FakeJualGraph(),
+    )
+    monkeypatch.setattr(
+        "app.agents.manager._load_shared_context_impl",
+        lambda state: {
+            "business_context": "",
+            "memory_block": "",
+            "valid_fact_ids": {"product:p1"},
+            "preloaded_fact_ids": {"product:p1"},
+            "last_harvested_msg_index": 0,
+        },
+    )
+    # Stub out DB write in finalize so we don't need a real business row
+    class _NopSession:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def add(self, r): pass
+        def commit(self): pass
+    monkeypatch.setattr("app.agents.manager_terminal.SessionLocal", _NopSession)
+    monkeypatch.setattr("app.agents.manager_terminal._enqueue_memory_write", lambda *a, **k: None)
+
+    class _Nop:
+        def with_structured_output(self, *_a, **_k): return self
+        async def ainvoke(self, *_a, **_k):
+            from app.schemas.agent_io import ManagerVerdict
+            return ManagerVerdict(verdict="pass", reason="ok")
+
+    graph = build_manager_graph(jual_llm=_Nop(), manager_llm=_Nop())
+    result = await graph.ainvoke({
+        "business_id": "biz_1",
+        "customer_phone": "60123",
+        "messages": [HumanMessage(content="terima kasih")],
+        "iterations": [],
+    })
+
+    # The tool message must have made it into ManagerState.messages, AND harvest
+    # must have folded the receipt id into valid_fact_ids.
+    assert any(isinstance(m, ToolMessage) for m in result["messages"]), \
+        "ToolMessage did not propagate from jual subgraph to ManagerState"
+    assert "order:none:60123" in result["valid_fact_ids"], \
+        f"harvest_receipts did not fold OrderReceipt into valid_fact_ids; got {result['valid_fact_ids']}"
