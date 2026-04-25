@@ -70,6 +70,20 @@ def make_finalize_node():
             payload={"confidence": record.confidence},
             ref=("agent_action", record.id),
         )
+        record_run(
+            business_id=record.businessId,
+            agent_type="manager",
+            kind="evaluate",
+            summary=f"manager evaluation ({len(state['iterations'])} iter)",
+            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
+                "FAILED" if record.status.name == "REJECTED" else "OK"
+            ),
+            payload={
+                "iterations": len(state["iterations"]),
+                "final_action": "auto_send" if record.status.name == "AUTO_SENT" else "escalate",
+            },
+            ref=("agent_action_manager", record.id),
+        )
         _enqueue_memory_write(state, action_id, final_reply)
         _log.info("manager_turn_terminal", extra={
             "action_id": action_id, "final_action": "auto_send",
@@ -108,6 +122,20 @@ def make_queue_for_human_node():
             ),
             payload={"confidence": record.confidence},
             ref=("agent_action", record.id),
+        )
+        record_run(
+            business_id=record.businessId,
+            agent_type="manager",
+            kind="evaluate",
+            summary=f"manager evaluation ({len(state['iterations'])} iter)",
+            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
+                "FAILED" if record.status.name == "REJECTED" else "OK"
+            ),
+            payload={
+                "iterations": len(state["iterations"]),
+                "final_action": "auto_send" if record.status.name == "AUTO_SENT" else "escalate",
+            },
+            ref=("agent_action_manager", record.id),
         )
         _log.info("manager_turn_terminal", extra={
             "action_id": action_id, "final_action": "escalate",
