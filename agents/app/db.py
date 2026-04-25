@@ -41,8 +41,11 @@ class Business(Base):
     name = Column(String, nullable=False)
     code = Column(String, unique=True, nullable=False)
     mission = Column(Text, nullable=True)
+    userId = Column(String, nullable=False)
     platformFeePct = Column(Numeric(5, 4), nullable=False, server_default=text("0.05"))
     defaultTransportCost = Column(Numeric(10, 2), nullable=False, server_default=text("0"))
+    createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Product(Base):
