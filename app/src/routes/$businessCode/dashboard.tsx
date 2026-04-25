@@ -7,7 +7,7 @@ import { fetchBusinesses } from '#/lib/business-server-fns'
 import { fetchDashboardStats } from '#/lib/dashboard-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
 import { Sidebar } from '#/components/sidebar'
-import { AgentCard } from '#/components/dashboard/agent-card'
+import { AgentCard, AgentCardSkeleton } from '#/components/dashboard/agent-card'
 import { StatCard } from '#/components/dashboard/stat-card'
 import { ActivityChart, BarChart, SuccessRate } from '#/components/dashboard/charts'
 import { ActivityFeed } from '#/components/dashboard/activity-feed'
@@ -55,24 +55,28 @@ function normalizeActivity(counts: number[]): number[] {
 
 function DashboardPage() {
   const { businesses, current, dashboardStats } = Route.useLoaderData()
-  const { agents: legacyAgents, stats, charts } = dashboardStats
+  const { charts } = dashboardStats
 
   const businessId = current.id
   const qc = useQueryClient()
   const [fallback, setFallback] = useState(false)
   const [drawerId, setDrawerId] = useState<number | null>(null)
 
-  const { data: registry = [] } = useQuery({
+  const registryQuery = useQuery({
     queryKey: ['registry', businessId],
     queryFn: () => agentApi.registry(businessId),
     refetchInterval: 15_000,
   })
+  const registry = registryQuery.data ?? []
+  const registryLoading = registryQuery.isPending
 
-  const { data: kpis } = useQuery({
+  const kpisQuery = useQuery({
     queryKey: ['kpis', businessId],
     queryFn: () => agentApi.kpis(businessId),
     refetchInterval: 30_000,
   })
+  const kpis = kpisQuery.data
+  const kpisLoading = kpisQuery.isPending
 
   useEffect(() => {
     let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -105,39 +109,40 @@ function DashboardPage() {
     }
   }, [businessId, qc])
 
-  // Use live registry if available, fall back to legacy agent list
-  const displayAgents =
-    registry.length > 0
-      ? registry.map((row, i) => agentRowToCard(row, i))
-      : legacyAgents
+  const displayAgents = registry.map((row, i) => agentRowToCard(row, i))
 
   const liveCount = displayAgents.filter(
     (a) => a.status === 'live' || a.status === 'running'
   ).length
 
-  const sidebarAgents = displayAgents.map((a, i) => ({
-    id: a.id,
-    name: a.name,
-    color: SIDEBAR_COLORS[i % SIDEBAR_COLORS.length],
-    live: a.status === 'live' || a.status === 'running',
-  }))
+  const sidebarAgents = registryLoading
+    ? []
+    : displayAgents.map((a, i) => ({
+        id: a.id,
+        name: a.name,
+        color: SIDEBAR_COLORS[i % SIDEBAR_COLORS.length],
+        live: a.status === 'live' || a.status === 'running',
+      }))
 
+  const dash = (v: string | number) => (kpisLoading && registryLoading ? '—' : String(v))
   const statCards = [
     {
       label: 'Agents Enabled',
-      value: registry.length > 0 ? String(registry.length) : String(stats.agentCount),
-      sub: `${kpis?.pending_approvals ?? stats.pendingCount} pending approval`,
+      value: registryLoading ? '—' : String(registry.length),
+      sub: kpisLoading ? '—' : `${kpis?.pending_approvals ?? 0} pending approval`,
       icon: Users,
       color: '#3b7ef8',
+      loading: registryLoading,
     },
     {
       label: 'Tasks In Progress',
-      // Currently-running agents (status='working' = last event within 60s).
-      // NOT total agent_action rows ever — that would be misleading.
-      value: String(registry.filter((a) => a.status === 'working').length),
-      sub: `${kpis?.pending_approvals ?? stats.pendingCount} pending`,
+      value: registryLoading
+        ? '—'
+        : String(registry.filter((a) => a.status === 'working').length),
+      sub: kpisLoading ? '—' : `${kpis?.pending_approvals ?? 0} pending`,
       icon: Play,
       color: '#00c97a',
+      loading: registryLoading,
     },
     {
       label: 'Month Spend',
@@ -145,20 +150,23 @@ function DashboardPage() {
       sub: 'Unlimited budget',
       icon: DollarSign,
       color: '#a78bfa',
+      loading: false,
     },
     {
       label: 'Pending Approvals',
-      value: String(kpis?.pending_approvals ?? stats.pendingCount),
+      value: dash(kpis?.pending_approvals ?? 0),
       sub: 'Awaiting review',
       icon: CheckSquare,
       color: '#f59e0b',
+      loading: kpisLoading,
     },
     {
       label: 'Active Conversations',
-      value: String(kpis?.active_conversations ?? 0),
+      value: dash(kpis?.active_conversations ?? 0),
       sub: 'Right now',
       icon: MessageSquare,
       color: '#22d3ee',
+      loading: kpisLoading,
     },
   ]
 
@@ -236,7 +244,13 @@ function DashboardPage() {
                 View all →
               </button>
             </div>
-            {displayAgents.length === 0 ? (
+            {registryLoading ? (
+              <div className="grid grid-cols-4 gap-2.5">
+                {[0, 1, 2, 3].map((i) => (
+                  <AgentCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : displayAgents.length === 0 ? (
               <div
                 className="rounded-xl p-6 text-center"
                 style={{

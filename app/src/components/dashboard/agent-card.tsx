@@ -38,6 +38,29 @@ export interface AgentCardData {
   queuedCount?: number
 }
 
+export function AgentCardSkeleton() {
+  const sk = { background: '#1e1e24', animation: 'pulse-skeleton 1.4s ease-in-out infinite' }
+  return (
+    <div
+      className="rounded-xl flex flex-col gap-2.5 p-3.5"
+      style={{ background: '#161618', border: '1px solid #1e1e24' }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-[26px] h-[26px] rounded-full" style={sk} />
+          <div className="h-3 w-20 rounded" style={sk} />
+        </div>
+        <div className="h-4 w-12 rounded-full" style={sk} />
+      </div>
+      <div className="h-12 rounded-lg" style={{ ...sk, background: '#0e0e10' }} />
+      <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: '#1e1e24' }}>
+        <div className="h-2.5 w-12 rounded" style={sk} />
+        <div className="h-2.5 w-10 rounded" style={sk} />
+      </div>
+    </div>
+  )
+}
+
 export function AgentCard({ agent, style }: { agent: AgentCardData; style?: React.CSSProperties }) {
   const isActive = agent.status === 'live' || agent.status === 'running'
 
