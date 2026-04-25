@@ -186,3 +186,91 @@ async def test_rewrite_then_escalate_when_rewrite_hallucinates(monkeypatch):
     assert result["final_action"] == "escalate"
     row = writes[0]
     assert row.status.value == "PENDING"
+
+
+@pytest.mark.asyncio
+async def test_negative_order_lookup_does_not_escalate(monkeypatch):
+    """Screenshot reproduction: buyer asks 'ada saya beli barang ke harini?',
+    order tool returns no rows, Jual cites the citable negative,
+    manager auto-sends instead of escalating."""
+    from app.agents.manager import build_manager_graph, _load_shared_context_impl
+    from app.schemas.agent_io import StructuredReply, FactRef, OrderReceipt
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    # Stub shared-context loader: just one product, plus the snapshot fields.
+    def _fake_load(state):
+        valid_ids = {"product:p1"}
+        return {
+            "business_context": "Business: Test",
+            "memory_block": "",
+            "valid_fact_ids": valid_ids,
+            "preloaded_fact_ids": set(valid_ids),
+            "last_harvested_msg_index": 0,
+        }
+    monkeypatch.setattr(
+        "app.agents.manager._load_shared_context_impl",
+        _fake_load,
+    )
+
+    # Stub jual_graph.ainvoke: simulate a tool call landing in messages and a
+    # draft that cites the negative receipt id.
+    phone_key = "60123456789"
+    fake_tool_msg = ToolMessage(
+        content="no orders found for this phone",
+        tool_call_id="call_x",
+    )
+    fake_tool_msg.artifact = [OrderReceipt(id=f"none:{phone_key}")]
+    fake_draft = StructuredReply(
+        reply="Tiada, saya tidak jumpa sebarang pesanan untuk nombor anda.",
+        confidence=0.9,
+        reasoning="Order lookup returned empty; cited negative.",
+        facts_used=[FactRef(kind="order", id=f"none:{phone_key}")],
+    )
+
+    class _FakeJualGraph:
+        async def ainvoke(self, sub_state):
+            new_msgs = list(sub_state["messages"]) + [
+                AIMessage(content="(tool call)"),
+                fake_tool_msg,
+            ]
+            return {
+                "messages": new_msgs,
+                "draft_reply": fake_draft.reply,
+                "structured_reply": fake_draft,
+                "confidence": fake_draft.confidence,
+                "reasoning": fake_draft.reasoning,
+            }
+
+    monkeypatch.setattr(
+        "app.agents.manager.build_customer_support_agent",
+        lambda llm: _FakeJualGraph(),
+    )
+
+    # Stub DB writes in finalize so we don't need a real business row.
+    class _NopSession:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def add(self, r): pass
+        def commit(self): pass
+    monkeypatch.setattr("app.agents.manager_terminal.SessionLocal", _NopSession)
+    monkeypatch.setattr("app.agents.manager_terminal._enqueue_memory_write", lambda *a, **k: None)
+
+    # Stub manager_llm — gates all pass (receipt cited correctly), so the LLM
+    # evaluator runs and must return "pass" to reach auto_send.
+    class _NopLLM:
+        def with_structured_output(self, *_a, **_k):
+            return self
+        async def ainvoke(self, *_a, **_k):
+            from app.schemas.agent_io import ManagerVerdict
+            return ManagerVerdict(verdict="pass", reason="all facts cited and grounded")
+
+    graph = build_manager_graph(jual_llm=_NopLLM(), manager_llm=_NopLLM())
+    result = await graph.ainvoke({
+        "business_id": "biz_1",
+        "customer_phone": "+60 12-345 6789",
+        "messages": [HumanMessage(content="ada saya beli barang ke harini?")],
+        "iterations": [],
+    })
+
+    assert result.get("final_action") == "auto_send", \
+        f"expected auto_send, got {result.get('final_action')} reason={result.get('verdict')}"
