@@ -50,6 +50,9 @@ app.include_router(make_agent_router(chat_graph))
 app.include_router(make_support_router(active_graph))
 app.include_router(memory_router)
 
+from app.routers.events import router as events_router
+app.include_router(events_router)
+
 
 @app.get("/health")
 def health():
