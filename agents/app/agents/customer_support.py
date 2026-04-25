@@ -420,8 +420,12 @@ def build_customer_support_agent(llm):
                 if chosen is None:
                     history.append(ToolMessage(content=f"ERROR: unknown tool {call['name']}", tool_call_id=call["id"]))
                     continue
-                result = chosen.invoke(call["args"])
-                history.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
+                # Tool invocation: pass the full ToolCall dict.
+                # - For @tool(response_format="content_and_artifact"): returns ToolMessage with .artifact populated.
+                # - For plain @tool: returns ToolMessage with .artifact=None.
+                # Single convention covers both during the migration window.
+                tool_msg = chosen.invoke(call)
+                history.append(tool_msg)
 
         last = history[-1]
         last_text = last.content if isinstance(last.content, str) else ""
