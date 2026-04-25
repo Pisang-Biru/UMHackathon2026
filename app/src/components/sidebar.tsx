@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   LayoutDashboard, CircleDot, RefreshCw, Target,
-  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag, Inbox, TrendingUp,
+  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag, Inbox, TrendingUp, MessageCircle,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -34,6 +34,7 @@ const NAV_ITEMS = [
   { icon: Inbox, label: 'Inbox', route: 'inbox' },
   { icon: ShoppingBag, label: 'Products', route: 'products' },
   { icon: TrendingUp, label: 'Sales', route: 'sales' },
+  { icon: MessageCircle, label: 'WhatsApp', route: 'whatsapp' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
   { icon: Target, label: 'Goals', route: 'goals' },
@@ -232,6 +233,7 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
 
       <div className="px-2 py-2 border-t flex flex-col gap-0.5" style={{ borderColor: '#1a1a1e' }}>
         <button
+          onClick={() => navigate({ to: '/$businessCode/settings', params: { businessCode: business.code } } as any)}
           className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
           style={{ color: '#555' }}
         >
