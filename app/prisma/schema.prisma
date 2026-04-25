@@ -92,11 +92,14 @@ model Business {
   mission      String?
   userId       String
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  products     Product[]
-  agentActions AgentAction[]
-  orders       Order[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  products             Product[]
+  agentActions         AgentAction[]
+  orders               Order[]
+  alerts               FinanceAlert[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  platformFeePct       Decimal       @default(0.05) @db.Decimal(5, 4)
+  defaultTransportCost Decimal       @default(0)    @db.Decimal(10, 2)
 
   @@map("business")
   @@schema("public")
@@ -110,9 +113,12 @@ model Product {
   description String?
   businessId  String
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  orders      Order[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  orders        Order[]
+  alerts        FinanceAlert[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  cogs          Decimal? @db.Decimal(10, 2)
+  packagingCost Decimal? @db.Decimal(10, 2)
 
   @@map("product")
   @@schema("public")
@@ -175,11 +181,51 @@ model Order {
   groupId         String?
   paidAt          DateTime?
   acknowledgedAt  DateTime?
+  transportCost   Decimal?      @db.Decimal(10, 2)
+  realMargin      Decimal?      @db.Decimal(10, 2)
+  marginStatus    MarginStatus?
+  alerts          FinanceAlert[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   @@map("order")
   @@index([businessId, status])
   @@index([groupId])
+  @@schema("public")
+}
+
+enum MarginStatus {
+  OK
+  LOSS
+  MISSING_DATA
+
+  @@schema("public")
+}
+
+model FinanceAlert {
+  id          String           @id @default(cuid())
+  businessId  String
+  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kind        FinanceAlertKind
+  marginValue Decimal?         @db.Decimal(10, 2)
+  message     String
+  resolvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("finance_alert")
+  @@index([businessId, resolvedAt])
+  @@index([businessId, kind, resolvedAt])
+  @@schema("public")
+}
+
+enum FinanceAlertKind {
+  LOSS
+  MISSING_DATA
+
   @@schema("public")
 }
