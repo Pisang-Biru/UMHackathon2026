@@ -27,7 +27,7 @@ def pick_best_draft_for_human(state: dict) -> str:
         if all_grounded:
             return rewrite.draft.reply
 
-    for stage in ("jual_v2", "jual_v1"):
+    for stage in ("jual_v2", "jual_v1", "marketing_v1"):
         entry = by_stage.get(stage)
         if entry and entry.draft:
             return entry.draft.reply

@@ -5,13 +5,6 @@ import re
 import tempfile
 from pathlib import Path
 
-import httpx
-from openai import OpenAI
-from PIL import Image
-from instagrapi import Client
-
-from app.db import SessionLocal, InstagramAuthSession
-
 
 AGENT_META = {
     "id": "marketing",
@@ -21,8 +14,21 @@ AGENT_META = {
 }
 
 
+# Match only explicit *commands* to post/create marketing content.
+# Avoid matching ordinary buyer chatter that merely mentions "promo",
+# "instagram", or "marketing" (e.g. "what's your IG handle?", "any promo?").
+# A match requires an action verb (post/buat/create/etc.) paired with an
+# Instagram/marketing target, or a clear "(ig|instagram) post" phrase.
 _MARKETING_INTENT_RE = re.compile(
-    r"\b(marketing|promosi|promo|poster|instagram|ig post|post ig|iklan|campaign)\b",
+    r"\b("
+    r"(?:post|posting|hantar|upload|share|publish)\s+"
+    r"(?:\d+\s+\S+\s+)?(?:to\s+|ke\s+|on\s+|di\s+)?(?:ig|instagram)"
+    r"|(?:ig|instagram)\s+post"
+    r"|post\s+ig"
+    r"|(?:buat|create|generate|jana|design|draft|make)\s+"
+    r"(?:\d+\s+)?(?:ig\s+posts?|instagram\s+posts?|posters?|promo\s+posts?|marketing\s+posts?|iklan|campaign)"
+    r"|marketing\s+(?:campaign|post)"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -45,7 +51,8 @@ def _extract_count(text: str, default: int = 1) -> int:
     return max(1, min(n, 10))
 
 
-def _generate_image_bytes(client: OpenAI, model: str, size: str, prompt: str) -> bytes:
+def _generate_image_bytes(client, model: str, size: str, prompt: str) -> bytes:
+    import httpx
     resp = client.images.generate(
         model=model,
         prompt=prompt,
@@ -65,6 +72,8 @@ def _generate_image_bytes(client: OpenAI, model: str, size: str, prompt: str) ->
 
 
 def _prepare_instagram_slide(image_bytes: bytes, idx: int) -> Path:
+    from PIL import Image
+
     target_w, target_h = 1080, 1350  # 4:5 feed-safe
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     ratio = min(target_w / img.width, target_h / img.height)
@@ -81,6 +90,11 @@ def _prepare_instagram_slide(image_bytes: bytes, idx: int) -> Path:
 
 
 def run_marketing_post(*, business_id: str, user_message: str) -> dict:
+    from openai import OpenAI
+    from instagrapi import Client
+
+    from app.db import SessionLocal, InstagramAuthSession
+
     openai_key = os.getenv("OPENAI_IMAGE_KEY")
     if not openai_key:
         raise RuntimeError("OPENAI_IMAGE_KEY not configured")
