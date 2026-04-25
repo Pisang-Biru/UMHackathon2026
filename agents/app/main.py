@@ -69,6 +69,9 @@ app.include_router(memory_router)
 from app.routers.events import router as events_router
 app.include_router(events_router)
 
+from app.routers.finance import router as finance_router
+app.include_router(finance_router)
+
 
 @app.get("/health")
 def health():
