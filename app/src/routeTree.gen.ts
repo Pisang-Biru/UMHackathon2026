@@ -15,6 +15,7 @@ import { Route as PayOrderIdRouteImport } from './routes/pay/$orderId'
 import { Route as BusinessCodeSalesRouteImport } from './routes/$businessCode/sales'
 import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode/products'
 import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/inbox'
+import { Route as BusinessCodeGoalsRouteImport } from './routes/$businessCode/goals'
 import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as BusinessCodeAgentsAgentTypeRouteImport } from './routes/$businessCode/agents/$agentType'
@@ -49,6 +50,11 @@ const BusinessCodeInboxRoute = BusinessCodeInboxRouteImport.update({
   path: '/$businessCode/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BusinessCodeGoalsRoute = BusinessCodeGoalsRouteImport.update({
+  id: '/$businessCode/goals',
+  path: '/$businessCode/goals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BusinessCodeDashboardRoute = BusinessCodeDashboardRouteImport.update({
   id: '/$businessCode/dashboard',
   path: '/$businessCode/dashboard',
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/goals': typeof BusinessCodeGoalsRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/goals': typeof BusinessCodeGoalsRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/goals': typeof BusinessCodeGoalsRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$businessCode/dashboard'
+    | '/$businessCode/goals'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
     | '/$businessCode/sales'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$businessCode/dashboard'
+    | '/$businessCode/goals'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
     | '/$businessCode/sales'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$businessCode/dashboard'
+    | '/$businessCode/goals'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
     | '/$businessCode/sales'
@@ -140,6 +152,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   BusinessCodeDashboardRoute: typeof BusinessCodeDashboardRoute
+  BusinessCodeGoalsRoute: typeof BusinessCodeGoalsRoute
   BusinessCodeInboxRoute: typeof BusinessCodeInboxRoute
   BusinessCodeProductsRoute: typeof BusinessCodeProductsRoute
   BusinessCodeSalesRoute: typeof BusinessCodeSalesRoute
@@ -192,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BusinessCodeInboxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/goals': {
+      id: '/$businessCode/goals'
+      path: '/$businessCode/goals'
+      fullPath: '/$businessCode/goals'
+      preLoaderRoute: typeof BusinessCodeGoalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$businessCode/dashboard': {
       id: '/$businessCode/dashboard'
       path: '/$businessCode/dashboard'
@@ -220,6 +240,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   BusinessCodeDashboardRoute: BusinessCodeDashboardRoute,
+  BusinessCodeGoalsRoute: BusinessCodeGoalsRoute,
   BusinessCodeInboxRoute: BusinessCodeInboxRoute,
   BusinessCodeProductsRoute: BusinessCodeProductsRoute,
   BusinessCodeSalesRoute: BusinessCodeSalesRoute,
