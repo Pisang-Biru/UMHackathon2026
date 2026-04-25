@@ -26,6 +26,9 @@ def engine():
 
 
 _MEMORY_TABLES = (
+    "agents.business_agents",
+    "agents.agents",
+    "agents.agent_events",
     "agents.memory_past_action",
     "agents.memory_product_embedding",
     "agents.memory_kb_chunk",

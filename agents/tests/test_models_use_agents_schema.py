@@ -1,7 +1,4 @@
-"""
-TDD: assert all alembic-owned models are pinned to the 'agents' schema.
-Run BEFORE patching models to confirm both tests fail, then again after.
-"""
+"""Assert all alembic-owned models are pinned to the 'agents' PostgreSQL schema."""
 from app.db import Agent, BusinessAgent, AgentEvent
 from app.memory.models import (
     MemoryConversationTurn,
