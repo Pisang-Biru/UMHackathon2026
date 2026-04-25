@@ -68,16 +68,29 @@ def run_gates(
         return GateResult(verdict="escalate", gate_num=1, reason_slug="jual_self_flagged", passed_gates=passed)
     passed.append("needs_human_flag")
 
-    # Gate 2 — hallucinated fact
+    # Gate 2 — hallucinated fact.
+    #
+    # `<kind>:none:*` is a wildcard sentinel: pre-seeded by load_shared_context
+    # only when an authoritative DB lookup confirms the buyer has no records
+    # of that kind. If present, accept any `<kind>:none:...` citation —
+    # the model may self-format the empty-receipt id with phone digits,
+    # masked digits, or any deterministic suffix; the negative is grounded
+    # by the (business, buyer, kind) tuple being verifiably empty.
     for fact in draft.facts_used:
         key = f"{fact.kind}:{fact.id}"
-        if key not in valid_fact_ids:
-            return GateResult(
-                verdict="rewrite",
-                gate_num=2,
-                reason_slug=f"ungrounded_fact:{fact.kind}:{fact.id}",
-                passed_gates=passed,
-            )
+        if key in valid_fact_ids:
+            continue
+        if (
+            fact.id.startswith("none:")
+            and f"{fact.kind}:none:*" in valid_fact_ids
+        ):
+            continue
+        return GateResult(
+            verdict="rewrite",
+            gate_num=2,
+            reason_slug=f"ungrounded_fact:{fact.kind}:{fact.id}",
+            passed_gates=passed,
+        )
     passed.append("hallucinated_fact")
 
     # Gate 3 / 4 — unaddressed questions

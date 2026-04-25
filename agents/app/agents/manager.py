@@ -6,7 +6,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 
-from app.db import SessionLocal, Business, Product
+from app.db import SessionLocal, Business, Product, Order
 from app.schemas.agent_io import (
     StructuredReply, ManagerCritique, IterationEntry,
 )
@@ -128,6 +128,31 @@ def _load_shared_context_impl(state: dict) -> dict:
             memory_block = format_memory_block(phone=phone, recent_turns=recent, summaries=summaries)
 
     valid_ids = {f"product:{p.id}" for p in products}
+
+    # Negative-receipt grounding for "no orders found".
+    #
+    # The Jual prompt teaches the model to cite `order:none:<phone>` on an
+    # empty order lookup. Some LLMs answer the negative correctly but
+    # either skip the tool call or self-redact phone digits in the output
+    # (e.g., emit `none:+601********`). We can't enumerate every variant
+    # in advance.
+    #
+    # Instead: at load time, do an authoritative DB lookup. If the buyer
+    # has NO orders with this business, seed the sentinel
+    # `order:none:*` — Gate 2 honors that to allow any `order:none:...`
+    # citation pattern. If the buyer DOES have orders, we deliberately do
+    # NOT seed, so Jual must cite real order ids. This bounds the trust
+    # surface to "buyer has nothing to cite" cases.
+    if phone:
+        with SessionLocal() as session:
+            existing = (
+                session.query(Order.id)
+                .filter(Order.businessId == business_id, Order.buyerContact == phone)
+                .first()
+            )
+        if existing is None:
+            valid_ids.add("order:none:*")
+
     return {
         "business_context": business_context,
         "memory_block": memory_block,
