@@ -28,6 +28,8 @@ from app.memory.formatter import memory_block as format_memory_block
 from app.memory.formatter import format_search_results
 from typing import Literal as _Lit
 from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
+from app.agents._traced import traced
+from app.events import emit
 
 AGENT_META = {
     "id": "customer_support",
@@ -344,6 +346,20 @@ def _try_parse_json_reply(text: str):
 
 def build_customer_support_agent(llm):
     async def load_context(state: SupportAgentState) -> dict:
+        # message.in — snapshot the inbound customer utterance for the dashboard feed.
+        try:
+            last = state["messages"][-1] if state.get("messages") else None
+            inbound = getattr(last, "content", None) if last is not None else None
+            if inbound:
+                emit(
+                    agent_id="customer_support",
+                    kind="message.in",
+                    business_id=state.get("business_id"),
+                    conversation_id=state.get("customer_id"),
+                    summary=str(inbound)[:200],
+                )
+        except Exception:
+            pass  # telemetry must never break the flow
         context = _build_context(state["business_id"])
         return {"business_context": context}
 
@@ -401,6 +417,19 @@ def build_customer_support_agent(llm):
 
         direct = _try_parse_json_reply(last_text)
         if direct is not None:
+            # message.out — the model's drafted reply body.
+            try:
+                _out_text = direct.reply if hasattr(direct, "reply") else None
+                if _out_text:
+                    emit(
+                        agent_id="customer_support",
+                        kind="message.out",
+                        business_id=state.get("business_id"),
+                        conversation_id=state.get("customer_id"),
+                        summary=str(_out_text)[:200],
+                    )
+            except Exception:
+                pass
             return {
                 "structured_reply": direct,
                 "draft_reply": direct.reply,
@@ -421,6 +450,19 @@ def build_customer_support_agent(llm):
             retry_text = response.content if isinstance(response.content, str) else ""
             retry_parsed = _try_parse_json_reply(retry_text)
             if retry_parsed is not None:
+                # message.out — the model's drafted reply body.
+                try:
+                    _out_text = retry_parsed.reply if hasattr(retry_parsed, "reply") else None
+                    if _out_text:
+                        emit(
+                            agent_id="customer_support",
+                            kind="message.out",
+                            business_id=state.get("business_id"),
+                            conversation_id=state.get("customer_id"),
+                            summary=str(_out_text)[:200],
+                        )
+                except Exception:
+                    pass
                 return {
                     "structured_reply": retry_parsed,
                     "draft_reply": retry_parsed.reply,
@@ -437,6 +479,19 @@ def build_customer_support_agent(llm):
             reasoning="JSON parsing failed twice",
             needs_human=True,
         )
+        # message.out — the model's drafted reply body.
+        try:
+            _out_text = fallback.reply if hasattr(fallback, "reply") else None
+            if _out_text:
+                emit(
+                    agent_id="customer_support",
+                    kind="message.out",
+                    business_id=state.get("business_id"),
+                    conversation_id=state.get("customer_id"),
+                    summary=str(_out_text)[:200],
+                )
+        except Exception:
+            pass
         return {
             "structured_reply": fallback,
             "draft_reply": fallback.reply,
@@ -473,6 +528,19 @@ def build_customer_support_agent(llm):
         ))
         history = [SystemMessage(content=system_prompt), *state["messages"], revision_instruction]
         response = await llm.with_structured_output(StructuredReply).ainvoke(history)
+        # message.out — the model's drafted reply body.
+        try:
+            _out_text = response.reply if hasattr(response, "reply") else None
+            if _out_text:
+                emit(
+                    agent_id="customer_support",
+                    kind="message.out",
+                    business_id=state.get("business_id"),
+                    conversation_id=state.get("customer_id"),
+                    summary=str(_out_text)[:200],
+                )
+        except Exception:
+            pass
         return {
             "structured_reply": response,
             "draft_reply": response.reply,
@@ -484,10 +552,10 @@ def build_customer_support_agent(llm):
         return "redraft_reply" if state.get("revision_mode") == "redraft" else "load_context"
 
     graph = StateGraph(SupportAgentState)
-    graph.add_node("load_context", load_context)
-    graph.add_node("load_memory", _load_memory_node)
-    graph.add_node("draft_reply", draft_reply)
-    graph.add_node("redraft_reply", redraft_reply)
+    graph.add_node("load_context", traced(agent_id="customer_support", node="load_context")(load_context))
+    graph.add_node("load_memory", traced(agent_id="customer_support", node="load_memory")(_load_memory_node))
+    graph.add_node("draft_reply", traced(agent_id="customer_support", node="draft_reply")(draft_reply))
+    graph.add_node("redraft_reply", traced(agent_id="customer_support", node="redraft_reply")(redraft_reply))
 
     graph.add_conditional_edges(START, _entry_route, {
         "load_context": "load_context",
