@@ -1,7 +1,7 @@
 import React from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { fetchBusinesses } from '#/lib/business-server-fns'
-import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget, KNOWN_AGENT_TYPES } from '#/lib/agent-server-fns'
+import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget } from '#/lib/agent-server-fns'
 import { approveAction, rejectAction } from '#/lib/inbox-server-fns'
 import { fetchAgentSales } from '#/lib/order-server-fns'
 import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
@@ -28,9 +28,6 @@ export const Route = createFileRoute('/$businessCode/agents/$agentType')({
     }
   },
   loader: async ({ params }) => {
-    if (!(KNOWN_AGENT_TYPES as readonly string[]).includes(params.agentType)) {
-      throw redirect({ to: '/$businessCode/inbox', params: { businessCode: params.businessCode } })
-    }
     const businesses = await fetchBusinesses()
     const current = businesses.find((b) => b.code === params.businessCode)
     if (!current) {
@@ -63,7 +60,13 @@ function AgentPage() {
   const { businesses, current, agentType, stats, sidebarAgents } = Route.useLoaderData()
   const search = Route.useSearch()
   const navigate = useNavigate()
-  const meta = getAgentMeta(agentType)
+  // Prefer the registry-sourced row from the sidebar (matches what the
+  // sidebar shows). Fall back to the local titlecase helper if the agent
+  // isn't in the registry yet (e.g., dev mode before boot upsert ran).
+  const fromSidebar = sidebarAgents.find((a) => a.id === agentType)
+  const meta = fromSidebar
+    ? { name: fromSidebar.name, color: fromSidebar.color }
+    : getAgentMeta(agentType)
 
   const [runsRows, setRunsRows] = React.useState<InboxAction[]>([])
   const [runsCursor, setRunsCursor] = React.useState<string | null>(null)

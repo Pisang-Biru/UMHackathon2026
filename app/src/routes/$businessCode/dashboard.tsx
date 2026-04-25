@@ -1,13 +1,22 @@
 // app/src/routes/$businessCode.dashboard.tsx
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { Users, Play, DollarSign, CheckSquare, Zap } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Users, Play, DollarSign, CheckSquare, Zap, MessageSquare } from 'lucide-react'
 import { fetchBusinesses } from '#/lib/business-server-fns'
 import { fetchDashboardStats } from '#/lib/dashboard-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
 import { Sidebar } from '#/components/sidebar'
-import { AgentCard } from '#/components/dashboard/agent-card'
+import { AgentCard, AgentCardSkeleton } from '#/components/dashboard/agent-card'
 import { StatCard } from '#/components/dashboard/stat-card'
 import { ActivityChart, BarChart, SuccessRate } from '#/components/dashboard/charts'
+import { ActivityFeed } from '#/components/dashboard/activity-feed'
+import { EventDrawer } from '#/components/dashboard/event-drawer'
+import { ConnectionBanner } from '#/components/dashboard/connection-banner'
+import { agentApi } from '#/lib/agent-api'
+import { openAgentEventStream } from '#/lib/agent-events-stream'
+import { prependEvent } from '#/lib/agent-events-store'
+import { agentRowToCard } from '#/lib/agent-row-to-card'
 
 export const Route = createFileRoute('/$businessCode/dashboard')({
   loader: async ({ params }) => {
@@ -46,33 +55,94 @@ function normalizeActivity(counts: number[]): number[] {
 
 function DashboardPage() {
   const { businesses, current, dashboardStats } = Route.useLoaderData()
-  const { agents, stats, charts } = dashboardStats
+  const { charts } = dashboardStats
 
-  const liveCount = agents.filter(
+  const businessId = current.id
+  const qc = useQueryClient()
+  const [fallback, setFallback] = useState(false)
+  const [drawerId, setDrawerId] = useState<number | null>(null)
+
+  const registryQuery = useQuery({
+    queryKey: ['registry', businessId],
+    queryFn: () => agentApi.registry(businessId),
+    refetchInterval: 15_000,
+  })
+  const registry = registryQuery.data ?? []
+  const registryLoading = registryQuery.isPending
+
+  const kpisQuery = useQuery({
+    queryKey: ['kpis', businessId],
+    queryFn: () => agentApi.kpis(businessId),
+    refetchInterval: 30_000,
+  })
+  const kpis = kpisQuery.data
+  const kpisLoading = kpisQuery.isPending
+
+  useEffect(() => {
+    let pollTimer: ReturnType<typeof setInterval> | null = null
+    const h = openAgentEventStream({
+      businessId,
+      onConnect: () => {
+        setFallback(false)
+        if (pollTimer) {
+          clearInterval(pollTimer)
+          pollTimer = null
+        }
+      },
+      onFallback: () => {
+        setFallback(true)
+        pollTimer = setInterval(() => {
+          qc.invalidateQueries({ queryKey: ['events'] })
+          qc.invalidateQueries({ queryKey: ['registry', businessId] })
+          qc.invalidateQueries({ queryKey: ['kpis', businessId] })
+        }, 5000)
+      },
+      onEvent: (ev) => {
+        prependEvent(qc, { businessId }, ev)
+        qc.invalidateQueries({ queryKey: ['kpis', businessId] })
+        qc.invalidateQueries({ queryKey: ['registry', businessId] })
+      },
+    })
+    return () => {
+      h.close()
+      if (pollTimer) clearInterval(pollTimer)
+    }
+  }, [businessId, qc])
+
+  const displayAgents = registry.map((row, i) => agentRowToCard(row, i))
+
+  const liveCount = displayAgents.filter(
     (a) => a.status === 'live' || a.status === 'running'
   ).length
 
-  const sidebarAgents = agents.map((a, i) => ({
-    id: a.id,
-    name: a.name,
-    color: SIDEBAR_COLORS[i % SIDEBAR_COLORS.length],
-    live: a.status === 'live' || a.status === 'running',
-  }))
+  const sidebarAgents = registryLoading
+    ? []
+    : displayAgents.map((a, i) => ({
+        id: a.id,
+        name: a.name,
+        color: SIDEBAR_COLORS[i % SIDEBAR_COLORS.length],
+        live: a.status === 'live' || a.status === 'running',
+      }))
 
+  const dash = (v: string | number) => (kpisLoading && registryLoading ? '—' : String(v))
   const statCards = [
     {
       label: 'Agents Enabled',
-      value: String(stats.agentCount),
-      sub: `${stats.pendingCount} pending approval`,
+      value: registryLoading ? '—' : String(registry.length),
+      sub: kpisLoading ? '—' : `${kpis?.pending_approvals ?? 0} pending approval`,
       icon: Users,
       color: '#3b7ef8',
+      loading: registryLoading,
     },
     {
       label: 'Tasks In Progress',
-      value: String(stats.totalCount),
-      sub: `${stats.pendingCount} pending`,
+      value: registryLoading
+        ? '—'
+        : String(registry.filter((a) => a.status === 'working').length),
+      sub: kpisLoading ? '—' : `${kpis?.pending_approvals ?? 0} pending`,
       icon: Play,
       color: '#00c97a',
+      loading: registryLoading,
     },
     {
       label: 'Month Spend',
@@ -80,13 +150,23 @@ function DashboardPage() {
       sub: 'Unlimited budget',
       icon: DollarSign,
       color: '#a78bfa',
+      loading: false,
     },
     {
       label: 'Pending Approvals',
-      value: String(stats.pendingCount),
+      value: dash(kpis?.pending_approvals ?? 0),
       sub: 'Awaiting review',
       icon: CheckSquare,
       color: '#f59e0b',
+      loading: kpisLoading,
+    },
+    {
+      label: 'Active Conversations',
+      value: dash(kpis?.active_conversations ?? 0),
+      sub: 'Right now',
+      icon: MessageSquare,
+      color: '#22d3ee',
+      loading: kpisLoading,
     },
   ]
 
@@ -95,7 +175,9 @@ function DashboardPage() {
       <BusinessStrip businesses={businesses} />
       <Sidebar business={current} agents={sidebarAgents} />
 
-      <main className="flex-1 overflow-auto" style={{ background: '#111113' }}>
+      <main className="flex-1 overflow-auto flex flex-col" style={{ background: '#111113' }}>
+        <ConnectionBanner fallback={fallback} />
+
         {/* Header */}
         <div className="px-8 pt-6 pb-5 border-b" style={{ borderColor: '#1a1a1e' }}>
           <div className="flex items-center justify-between">
@@ -162,7 +244,13 @@ function DashboardPage() {
                 View all →
               </button>
             </div>
-            {agents.length === 0 ? (
+            {registryLoading ? (
+              <div className="grid grid-cols-4 gap-2.5">
+                {[0, 1, 2, 3].map((i) => (
+                  <AgentCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : displayAgents.length === 0 ? (
               <div
                 className="rounded-xl p-6 text-center"
                 style={{
@@ -177,7 +265,7 @@ function DashboardPage() {
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-2.5">
-                {agents.map((agent) => (
+                {displayAgents.map((agent) => (
                   <AgentCard key={agent.id} agent={agent} />
                 ))}
               </div>
@@ -185,7 +273,7 @@ function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-5 gap-2.5">
             {statCards.map((stat) => (
               <StatCard key={stat.label} {...stat} />
             ))}
@@ -198,7 +286,21 @@ function DashboardPage() {
             <BarChart bars={toBarHeights(charts.byAgent)} title="By Agent" />
             <SuccessRate percent={charts.successRate} />
           </div>
+
+          {/* Activity Feed */}
+          <ActivityFeed
+            filters={{ businessId }}
+            onRowClick={(e) => setDrawerId(e.id)}
+          />
         </div>
+
+        {/* Event Drawer */}
+        <EventDrawer
+          eventId={drawerId}
+          businessId={businessId}
+          open={drawerId != null}
+          onClose={() => setDrawerId(null)}
+        />
       </main>
     </div>
   )

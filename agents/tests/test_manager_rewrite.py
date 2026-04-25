@@ -54,11 +54,26 @@ async def test_gates_only_check_passes_on_clean_rewrite():
 async def test_gates_only_check_escalates_on_hallucinated_rewrite():
     draft = StructuredReply(reply="ok", facts_used=[FactRef(kind="product", id="ghost")])
     state = {
+        "messages": [HumanMessage(content="berapa harga?")],
         "valid_fact_ids": {"product:p1"},
         "iterations": [IterationEntry(stage="manager_rewrite", draft=draft)],
     }
     out = await gates_only_check(state)
     assert out["final_action_hint"] == "escalate"
+
+
+@pytest.mark.asyncio
+async def test_gates_only_check_strips_ungrounded_on_non_factual_msg():
+    """Non-factual buyer msg + ungrounded rewrite fact → strip and auto_send."""
+    draft = StructuredReply(reply="ok", facts_used=[FactRef(kind="product", id="ghost")])
+    state = {
+        "messages": [HumanMessage(content="hi ini kedai X ke?")],
+        "valid_fact_ids": {"product:p1"},
+        "iterations": [IterationEntry(stage="manager_rewrite", draft=draft)],
+    }
+    out = await gates_only_check(state)
+    assert out["final_action_hint"] == "auto_send"
+    assert draft.facts_used == []
 
 
 @pytest.mark.asyncio

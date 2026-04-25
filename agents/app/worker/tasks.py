@@ -119,6 +119,15 @@ def _llm_summarize(turns) -> str:
     return resp.content if isinstance(resp.content, str) else str(resp.content)
 
 
+from app.worker.prune import prune_agent_events as _prune_agent_events
+
+
+@celery.task(name="app.worker.tasks.prune_agent_events")
+def prune_agent_events_task() -> int:
+    """Celery wrapper for the prune helper. Default retention 30 days."""
+    return _prune_agent_events(days=30)
+
+
 @celery.task
 def summarize_old_turns():
     recent_keep = int(os.environ.get("MEMORY_RECENT_TURNS", "20"))

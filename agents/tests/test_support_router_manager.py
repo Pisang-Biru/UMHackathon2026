@@ -25,7 +25,7 @@ def test_auto_sent_response_includes_best_draft_null(client_with_manager, monkey
     monkeypatch.setattr(support_mod, "_support_graph_ainvoke", _fake_invoke)
 
     resp = client_with_manager.post("/agent/support/chat", json={
-        "business_id": "biz1", "customer_id": "c1", "message": "hi",
+        "business_id": "biz1", "customer_id": "c1", "message": "saya nak tanya pasal pesanan",
     })
     assert resp.status_code == 200
     data = resp.json()

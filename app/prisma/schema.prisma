@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -6,12 +5,15 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["public"]
 }
 
 model Todo {
   id        Int      @id @default(autoincrement())
   title     String
   createdAt DateTime @default(now())
+
+  @@schema("public")
 }
 
 model User {
@@ -28,6 +30,7 @@ model User {
 
   @@unique([email])
   @@map("user")
+  @@schema("public")
 }
 
 model Session {
@@ -44,6 +47,7 @@ model Session {
   @@unique([token])
   @@index([userId])
   @@map("session")
+  @@schema("public")
 }
 
 model Account {
@@ -64,6 +68,7 @@ model Account {
 
   @@index([userId])
   @@map("account")
+  @@schema("public")
 }
 
 model Verification {
@@ -76,6 +81,7 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+  @@schema("public")
 }
 
 model Business {
@@ -85,13 +91,18 @@ model Business {
   mission      String?
   userId       String
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  products     Product[]
-  agentActions AgentAction[]
-  orders       Order[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  products             Product[]
+  agentActions         AgentAction[]
+  orders               Order[]
+  goals                Goal[]
+  alerts               FinanceAlert[]
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  platformFeePct       Decimal        @default(0.05) @db.Decimal(5, 4)
+  defaultTransportCost Decimal        @default(0)    @db.Decimal(10, 2)
 
   @@map("business")
+  @@schema("public")
 }
 
 model Product {
@@ -102,11 +113,14 @@ model Product {
   description String?
   businessId  String
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  orders      Order[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  orders        Order[]
+  alerts        FinanceAlert[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  packagingCost Decimal? @db.Decimal(10, 2)
 
   @@map("product")
+  @@schema("public")
 }
 
 enum AgentActionStatus {
@@ -114,55 +128,128 @@ enum AgentActionStatus {
   APPROVED
   REJECTED
   AUTO_SENT
+
+  @@schema("public")
 }
 
 model AgentAction {
-  id          String            @id @default(cuid())
-  businessId  String
-  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customerMsg String
-  draftReply  String
-  finalReply  String?
-  confidence  Float
-  reasoning   String
-  status      AgentActionStatus @default(PENDING)
-  viewedAt    DateTime?
-  agentType   String            @default("support")
-  inputTokens   Int?
-  outputTokens  Int?
-  cachedTokens  Int?
-  costUsd       Decimal? @db.Decimal(10, 6)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id           String            @id @default(cuid())
+  businessId   String
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerMsg  String
+  draftReply   String
+  finalReply   String?
+  confidence   Float
+  reasoning    String
+  status       AgentActionStatus @default(PENDING)
+  viewedAt     DateTime?
+  agentType    String            @default("support")
+  inputTokens  Int?
+  outputTokens Int?
+  cachedTokens Int?
+  costUsd      Decimal?          @db.Decimal(10, 6)
+  iterations   Json              @default("[]")
+  approvedAt   DateTime?         @db.Timestamptz()
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@map("agent_action")
+  @@schema("public")
 }
 
 enum OrderStatus {
   PENDING_PAYMENT
   PAID
   CANCELLED
+
+  @@schema("public")
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  businessId      String
-  business        Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  productId       String
-  product         Product     @relation(fields: [productId], references: [id])
-  agentType       String?
-  qty             Int
-  unitPrice       Decimal     @db.Decimal(10, 2)
-  totalAmount     Decimal     @db.Decimal(10, 2)
-  status          OrderStatus @default(PENDING_PAYMENT)
-  buyerName       String?
-  buyerContact    String?
-  paymentUrl      String?
-  paidAt          DateTime?
-  acknowledgedAt  DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id             String         @id @default(cuid())
+  businessId     String
+  business       Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id])
+  agentType      String?
+  qty            Int
+  unitPrice      Decimal        @db.Decimal(10, 2)
+  totalAmount    Decimal        @db.Decimal(10, 2)
+  status         OrderStatus    @default(PENDING_PAYMENT)
+  buyerName      String?
+  buyerContact   String?
+  paymentUrl     String?
+  groupId        String?
+  paidAt         DateTime?
+  acknowledgedAt DateTime?
+  transportCost  Decimal?       @db.Decimal(10, 2)
+  realMargin     Decimal?       @db.Decimal(10, 2)
+  marginStatus   MarginStatus?
+  alerts         FinanceAlert[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  @@map("order")
   @@index([businessId, status])
+  @@index([groupId])
+  @@map("order")
+  @@schema("public")
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+
+  @@schema("public")
+}
+
+model Goal {
+  id         String     @id @default(cuid())
+  businessId String
+  business   Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  text       String
+  status     GoalStatus @default(ACTIVE)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+
+  @@index([businessId, deletedAt, status, createdAt])
+  @@map("goal")
+  @@schema("public")
+}
+
+enum MarginStatus {
+  OK
+  LOSS
+  MISSING_DATA
+
+  @@schema("public")
+}
+
+model FinanceAlert {
+  id          String           @id @default(cuid())
+  businessId  String
+  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kind        FinanceAlertKind
+  marginValue Decimal?         @db.Decimal(10, 2)
+  message     String
+  resolvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("finance_alert")
+  @@index([businessId, resolvedAt])
+  @@index([businessId, kind, resolvedAt])
+  @@schema("public")
+}
+
+enum FinanceAlertKind {
+  LOSS
+  MISSING_DATA
+
+  @@schema("public")
 }

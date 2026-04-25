@@ -13,6 +13,7 @@ x-agents-env: &agents-env
   POSTGRES_HOST: postgres
   POSTGRES_USER: postgres
   RABBITMQ_HOST: rabbitmq
+  REDIS_URL: redis://redis:6379/0
   # LLM creds (MODEL, API_KEY, OPENAI_API_BASE) come from agents/.env via env_file
 
 x-agents-common: &agents-common
@@ -83,6 +84,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   agents-worker:
     image: pisang-agents:dev
@@ -100,6 +103,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   agents-beat:
     image: pisang-agents:dev
@@ -115,6 +120,18 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
 
 volumes:
   pg-data:

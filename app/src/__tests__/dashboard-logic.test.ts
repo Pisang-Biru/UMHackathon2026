@@ -145,8 +145,10 @@ describe('buildAgentCards', () => {
     ]
     const cards = buildAgentCards(actions, NOW)
     expect(cards).toHaveLength(2)
-    expect(cards.map(c => c.name)).toContain('Support Agent')
-    expect(cards.map(c => c.name)).toContain('sales')
+    // agent-meta now derives display names via titlecase fallback;
+    // backend AGENT_META is the single source of truth for canonical names.
+    expect(cards.map(c => c.name)).toContain('Support')
+    expect(cards.map(c => c.name)).toContain('Sales')
   })
 
   it('uses latest action (first in list, assumed desc order) for status', () => {
@@ -168,7 +170,7 @@ describe('buildAgentCards', () => {
   it('sets avatar from display name initials', () => {
     const actions = [makeAction('support', 'PENDING')]
     const cards = buildAgentCards(actions, NOW)
-    expect(cards[0].avatar).toBe('SA')
+    expect(cards[0].avatar).toBe('SU')
   })
 
   it('assigns colors deterministically by index', () => {

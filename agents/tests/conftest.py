@@ -19,17 +19,21 @@ def engine():
     eng = create_engine(url, pool_pre_ping=True)
     with eng.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS agents"))
         conn.commit()
     Base.metadata.create_all(eng)
     yield eng
 
 
 _MEMORY_TABLES = (
-    "memory_past_action",
-    "memory_product_embedding",
-    "memory_kb_chunk",
-    "memory_conversation_summary",
-    "memory_conversation_turn",
+    "agents.business_agents",
+    "agents.agents",
+    "agents.agent_events",
+    "agents.memory_past_action",
+    "agents.memory_product_embedding",
+    "agents.memory_kb_chunk",
+    "agents.memory_conversation_summary",
+    "agents.memory_conversation_turn",
     "agent_action",
     "order",
     "product",
@@ -55,7 +59,10 @@ def bootstrap_fk_rows(engine):
 def session(engine):
     with engine.begin() as conn:
         for t in _MEMORY_TABLES:
-            conn.execute(text(f'TRUNCATE TABLE "{t}" RESTART IDENTITY CASCADE'))
+            # Schema-qualified names (e.g. "agents.memory_kb_chunk") are safe
+            # unquoted; bare reserved words (e.g. "order") need quoting.
+            qualified = t if "." in t else f'"{t}"'
+            conn.execute(text(f"TRUNCATE TABLE {qualified} RESTART IDENTITY CASCADE"))
     Session = sessionmaker(bind=engine)
     with Session() as s:
         yield s

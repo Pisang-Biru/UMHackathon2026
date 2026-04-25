@@ -29,14 +29,16 @@ function serializeAction(a: any) {
   return { ...a, costUsd: a.costUsd == null ? null : a.costUsd.toNumber() }
 }
 
-export const KNOWN_AGENT_TYPES = ['support'] as const
-export type KnownAgentType = (typeof KNOWN_AGENT_TYPES)[number]
+// agentType is whatever the backend registry exposes (Python AGENT_META.id).
+// We do NOT maintain a frontend allowlist — adding a new agent must not
+// require touching this file. Validate shape only: a slug-like identifier.
+const AGENT_TYPE_RE = /^[a-z][a-z0-9_]*$/i
 
-function validateAgentType(raw: unknown): KnownAgentType {
-  if (typeof raw !== 'string' || !(KNOWN_AGENT_TYPES as readonly string[]).includes(raw)) {
-    throw new Error('Unknown agentType')
+function validateAgentType(raw: unknown): string {
+  if (typeof raw !== 'string' || !AGENT_TYPE_RE.test(raw)) {
+    throw new Error('Invalid agentType id')
   }
-  return raw as KnownAgentType
+  return raw
 }
 
 function validateCommon(data: unknown) {
