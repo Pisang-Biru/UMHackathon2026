@@ -36,7 +36,7 @@ const NAV_ITEMS = [
   { icon: TrendingUp, label: 'Sales', route: 'sales' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
-  { icon: Target, label: 'Goals' },
+  { icon: Target, label: 'Goals', route: 'goals' },
 ]
 
 const PRODUCT_ITEMS = [
