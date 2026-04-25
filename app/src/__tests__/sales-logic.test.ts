@@ -6,7 +6,6 @@ import {
   buildSeries,
   serializeSalesCsv,
   type SalesOrder,
-  type SalesRange,
 } from '#/lib/sales-logic'
 
 const T0 = new Date('2026-04-25T12:00:00Z')
