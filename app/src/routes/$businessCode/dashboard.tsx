@@ -132,7 +132,9 @@ function DashboardPage() {
     },
     {
       label: 'Tasks In Progress',
-      value: String(stats.totalCount),
+      // Currently-running agents (status='working' = last event within 60s).
+      // NOT total agent_action rows ever — that would be misleading.
+      value: String(registry.filter((a) => a.status === 'working').length),
       sub: `${kpis?.pending_approvals ?? stats.pendingCount} pending`,
       icon: Play,
       color: '#00c97a',

@@ -34,6 +34,28 @@ def test_kpis_shape():
     _cleanup("c-k1")
 
 
+def test_kpis_active_uses_60s_window_not_24h():
+    """Events older than 60s should NOT count as active conversations,
+    even though they still count toward 24h-windowed metrics like tokens."""
+    from datetime import datetime, timedelta, timezone
+    with SessionLocal() as s:
+        s.add(AgentEvent(
+            agent_id="manager", business_id=BIZ,
+            conversation_id="c-stale-1", kind="node.end",
+            tokens_in=3, tokens_out=4,
+            ts=datetime.now(timezone.utc) - timedelta(minutes=5),
+        ))
+        s.commit()
+    client = TestClient(app)
+    r = client.get("/agent/kpis", params={"business_id": BIZ})
+    j = r.json()
+    # 5-minute-old conversation is NOT active anymore.
+    assert j["active_conversations"] == 0
+    # But its tokens still count toward the 24h-windowed total.
+    assert j["tokens_spent"] >= 7
+    _cleanup("c-stale-1")
+
+
 def test_kpis_zero_when_empty():
     client = TestClient(app)
     r = client.get("/agent/kpis", params={"business_id": "no-such-biz-xyz"})

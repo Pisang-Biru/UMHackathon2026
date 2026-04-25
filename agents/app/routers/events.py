@@ -205,12 +205,19 @@ def event_detail(
 
 @router.get("/kpis")
 def kpis(business_id: str = Query(...), window: str = "24h"):
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    # Window-scoped metrics (escalation rate, tokens, etc.) use the 24h
+    # window. "Active conversations" is intentionally narrower: it means
+    # conversations with activity *right now*, so it uses a 60s window
+    # that matches the registry "working" status threshold. This way an
+    # idle dashboard correctly reads 0.
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(hours=24)
+    active_since = now - timedelta(seconds=60)
     with SessionLocal() as s:
         active = s.execute(
             select(func.count(func.distinct(AgentEvent.conversation_id)))
             .where(AgentEvent.business_id == business_id,
-                   AgentEvent.ts >= since,
+                   AgentEvent.ts >= active_since,
                    AgentEvent.conversation_id.is_not(None))
         ).scalar_one() or 0
 
