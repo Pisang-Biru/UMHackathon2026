@@ -8,7 +8,7 @@ from app.schemas.agent_io import StructuredReply, ManagerCritique
 
 FACTUAL_Q_RE = re.compile(
     r"\b(harga|price|stock|berapa|bila|macam\s+mana|bagaimana|"
-    r"how\s+much|available|when|order|cost)\b",
+    r"how\s+much|available|when|order|cost|beli)\b",
     re.IGNORECASE,
 )
 
@@ -43,7 +43,23 @@ def run_gates(
     valid_fact_ids: set[str],
     revision_count: int,
     messages: list[BaseMessage],
+    preloaded_fact_ids: set[str] | None = None,
 ) -> GateResult:
+    """Run gates against a draft.
+
+    `preloaded_fact_ids` is the snapshot of valid_fact_ids before any tools fired
+    this turn. Used by Gate 5 to distinguish "no tool fired" (ungrounded answer)
+    from "tool fired but draft did not cite the result" (uncited tool result).
+    Defaults to empty for callers that don't track it (legacy tests).
+
+    kb / memory:past_action grounding verifies a specific retrieved chunk was
+    cited as basis. Relevance of claim to chunk content is NOT checked
+    automatically — that's delegated to manager_evaluator's content judgment.
+    A future LLM-judged relevance gate (claim-vs-content) would close this gap.
+    See docs/superpowers/specs/2026-04-25-grounding-receipts-envelope-design.md §8.
+    """
+    if preloaded_fact_ids is None:
+        preloaded_fact_ids = set()
     passed = []
 
     # Gate 1 — needs_human flag
@@ -81,14 +97,17 @@ def run_gates(
         )
     passed.append("unaddressed")
 
-    # Gate 5a/5b — ungrounded factual question
+    # Gate 5 — factual question without grounding
     buyer_msg = _last_human_text(messages)
     if FACTUAL_Q_RE.search(buyer_msg) and not draft.facts_used:
+        added_this_turn = valid_fact_ids - preloaded_fact_ids
+        had_retrieval = bool(added_this_turn)
+        base = "uncited_tool_result" if had_retrieval else "ungrounded_factual_answer"
         if revision_count == 0:
             return GateResult(
                 verdict="revise",
                 gate_num=5,
-                reason_slug="ungrounded_factual_answer",
+                reason_slug=base,
                 critique=ManagerCritique(
                     missing_facts=[f"grounded data for: {buyer_msg[:80]}"],
                 ),
@@ -97,7 +116,7 @@ def run_gates(
         return GateResult(
             verdict="rewrite",
             gate_num=5,
-            reason_slug="ungrounded_factual_answer_persists",
+            reason_slug=f"{base}_persists",
             passed_gates=passed,
         )
     passed.append("factual_q_grounded")

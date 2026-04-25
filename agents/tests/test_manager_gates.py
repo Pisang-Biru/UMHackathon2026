@@ -111,3 +111,56 @@ def test_factual_q_regex_ignores_non_factual(phrase):
     d = _draft(facts_used=[])
     r = run_gates(d, valid_fact_ids=set(), revision_count=0, messages=_msgs(phrase))
     assert r.verdict is None, f"expected no gate 5 hit on {phrase!r}, got {r.verdict}"
+
+
+def test_gate5_no_facts_no_retrieval_says_ungrounded():
+    d = _draft(facts_used=[])
+    r = run_gates(
+        d,
+        valid_fact_ids={"product:p1"},
+        preloaded_fact_ids={"product:p1"},
+        revision_count=0,
+        messages=_msgs("ada saya beli apa-apa harini?"),
+    )
+    assert r.verdict == "revise"
+    assert r.gate_num == 5
+    assert r.reason_slug == "ungrounded_factual_answer"
+
+
+def test_gate5_no_facts_but_retrieval_happened_says_uncited():
+    d = _draft(facts_used=[])
+    r = run_gates(
+        d,
+        valid_fact_ids={"product:p1", "order:none:60123"},
+        preloaded_fact_ids={"product:p1"},
+        revision_count=0,
+        messages=_msgs("ada saya beli apa-apa harini?"),
+    )
+    assert r.verdict == "revise"
+    assert r.gate_num == 5
+    assert r.reason_slug == "uncited_tool_result"
+
+
+def test_gate5_negative_receipt_cited_passes():
+    d = _draft(facts_used=[FactRef(kind="order", id="none:60123")])
+    r = run_gates(
+        d,
+        valid_fact_ids={"product:p1", "order:none:60123"},
+        preloaded_fact_ids={"product:p1"},
+        revision_count=0,
+        messages=_msgs("ada saya beli apa-apa harini?"),
+    )
+    assert r.verdict is None  # all gates passed
+
+
+def test_gate5_uncited_tool_result_persists_after_revise():
+    d = _draft(facts_used=[])
+    r = run_gates(
+        d,
+        valid_fact_ids={"product:p1", "order:ord_42"},
+        preloaded_fact_ids={"product:p1"},
+        revision_count=1,
+        messages=_msgs("ada saya beli apa-apa harini?"),
+    )
+    assert r.verdict == "rewrite"
+    assert r.reason_slug == "uncited_tool_result_persists"
