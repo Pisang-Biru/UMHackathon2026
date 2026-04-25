@@ -16,14 +16,17 @@ def _seed_product(session, product_id="p1", stock=100, price=Decimal("5.00")):
 
 
 def test_create_order_persists_buyer_contact(session):
+    from app.agents.customer_support import APP_URL
     _seed_product(session)
     order_id, payment_url = _create_order("biz1", "p1", 3, buyer_contact="+60123456789")
     row = session.query(Order).filter(Order.id == order_id).one()
     assert row.buyerContact == "+60123456789"
     assert row.qty == 3
     assert row.businessId == "biz1"
-    assert payment_url.endswith(f"/pay/{order_id}")
+    # cart-aware: URL targets the groupId, not the order id (one link per cart).
+    assert payment_url.startswith(f"{APP_URL}/pay/")
     assert row.paymentUrl == payment_url
+    assert row.groupId is not None
 
 
 def _seed_order(session, order_id, phone, status=OrderStatus.PENDING_PAYMENT,

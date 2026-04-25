@@ -33,12 +33,45 @@ export const fetchPublicOrder = createServerFn({ method: 'GET' })
     return { orderId: (data as { orderId: string }).orderId }
   })
   .handler(async ({ data }) => {
+    // The id in the URL may be either a single Order.id (legacy) or a groupId
+    // (multi-line cart). Try groupId first; fall back to single-order lookup.
+    const groupOrders = await prisma.order.findMany({
+      where: { groupId: data.orderId },
+      include: { product: { select: { id: true, name: true } }, business: { select: { name: true } } },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    if (groupOrders.length > 0) {
+      const businessName = groupOrders[0].business.name
+      const items = groupOrders.map((o) => ({
+        order: serializeOrder({ ...o, business: undefined, product: undefined }),
+        product: o.product,
+      }))
+      const totalAmount = items.reduce((sum, it) => sum + Number(it.order.totalAmount ?? 0), 0)
+      const allPaid = groupOrders.every((o) => o.status === 'PAID')
+      const anyCancelled = groupOrders.some((o) => o.status === 'CANCELLED')
+      const aggregateStatus = anyCancelled ? 'CANCELLED' : allPaid ? 'PAID' : 'PENDING_PAYMENT'
+      const buyerContact = groupOrders[0].buyerContact ?? null
+      const buyerName = groupOrders.find((o) => o.buyerName)?.buyerName ?? null
+      return {
+        kind: 'group' as const,
+        groupId: data.orderId,
+        businessName,
+        items,
+        totalAmount,
+        status: aggregateStatus,
+        buyerContact,
+        buyerName,
+      }
+    }
+
     const order = await prisma.order.findUnique({
       where: { id: data.orderId },
       include: { product: { select: { id: true, name: true } }, business: { select: { name: true } } },
     })
     if (!order) return null
     return {
+      kind: 'single' as const,
       order: serializeOrder({ ...order, business: undefined, product: undefined }),
       product: order.product,
       businessName: order.business.name,
@@ -54,23 +87,37 @@ export const submitMockPayment = createServerFn({ method: 'POST' })
     return { orderId: d.orderId, buyerName: d.buyerName.trim() }
   })
   .handler(async ({ data }) => {
+    // The id may be a groupId (multi-line cart) or a single Order.id.
     const result = await prisma.$transaction(async (tx) => {
+      const groupOrders = await tx.order.findMany({ where: { groupId: data.orderId } })
+      if (groupOrders.length > 0) {
+        const pending = groupOrders.filter((o) => o.status === 'PENDING_PAYMENT')
+        if (pending.length === 0) {
+          // Already settled or cancelled — surface the first non-pending status.
+          throw new Error(`Order is ${groupOrders[0].status}`)
+        }
+        await tx.order.updateMany({
+          where: { groupId: data.orderId, status: 'PENDING_PAYMENT' },
+          data: { status: 'PAID', paidAt: new Date(), buyerName: data.buyerName },
+        })
+        const refreshed = await tx.order.findMany({ where: { groupId: data.orderId } })
+        return {
+          updated: refreshed,
+          productIds: Array.from(new Set(groupOrders.map((o) => o.productId))),
+        }
+      }
       const order = await tx.order.findUnique({ where: { id: data.orderId } })
       if (!order) throw new Error('Order not found')
       if (order.status !== 'PENDING_PAYMENT') throw new Error(`Order is ${order.status}`)
-
       const updated = await tx.order.update({
         where: { id: data.orderId },
-        data: {
-          status: 'PAID',
-          paidAt: new Date(),
-          buyerName: data.buyerName,
-        },
+        data: { status: 'PAID', paidAt: new Date(), buyerName: data.buyerName },
       })
-      return { updated, productId: order.productId }
+      return { updated: [updated], productIds: [order.productId] }
     })
-    enqueueProductReindex(result.productId)
-    return serializeOrder(result.updated)
+    for (const pid of result.productIds) enqueueProductReindex(pid)
+    // Return the first row in legacy serialized shape so existing callers keep working.
+    return serializeOrder(result.updated[0])
   })
 
 export const acknowledgeOrder = createServerFn({ method: 'POST' })

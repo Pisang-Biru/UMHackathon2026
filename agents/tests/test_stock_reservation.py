@@ -68,7 +68,7 @@ def test_create_order_rejects_non_positive_qty(TestSession, monkeypatch):
     pid = _seed_product(TestSession, stock=5)
     monkeypatch.setattr(customer_support, "SessionLocal", TestSession)
 
-    with pytest.raises(ValueError, match="qty must be positive"):
+    with pytest.raises(ValueError, match="must be positive"):
         customer_support._create_order("biz1", pid, qty=0)
 
 

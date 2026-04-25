@@ -10,6 +10,7 @@ EMBED_DIM = 1024
 
 class MemoryConversationTurn(Base):
     __tablename__ = "memory_conversation_turn"
+    __table_args__ = {"schema": "agents"}
     id = Column(String, primary_key=True)
     businessId = Column(String, nullable=False, index=True)
     customerPhone = Column(String, nullable=False, index=True)
@@ -22,6 +23,7 @@ class MemoryConversationTurn(Base):
 
 class MemoryConversationSummary(Base):
     __tablename__ = "memory_conversation_summary"
+    __table_args__ = {"schema": "agents"}
     id = Column(String, primary_key=True)
     businessId = Column(String, nullable=False, index=True)
     customerPhone = Column(String, nullable=False, index=True)
@@ -34,6 +36,7 @@ class MemoryConversationSummary(Base):
 
 class MemoryKbChunk(Base):
     __tablename__ = "memory_kb_chunk"
+    __table_args__ = {"schema": "agents"}
     id = Column(String, primary_key=True)
     businessId = Column(String, nullable=False, index=True)
     sourceId = Column(String, nullable=False, index=True)
@@ -45,6 +48,7 @@ class MemoryKbChunk(Base):
 
 class MemoryProductEmbedding(Base):
     __tablename__ = "memory_product_embedding"
+    __table_args__ = {"schema": "agents"}
     productId = Column(String, primary_key=True)
     businessId = Column(String, nullable=False, index=True)
     content = Column(Text, nullable=False)
@@ -55,6 +59,7 @@ class MemoryProductEmbedding(Base):
 
 class MemoryPastAction(Base):
     __tablename__ = "memory_past_action"
+    __table_args__ = {"schema": "agents"}
     id = Column(String, primary_key=True)
     businessId = Column(String, nullable=False, index=True)
     customerMsg = Column(Text, nullable=False)
