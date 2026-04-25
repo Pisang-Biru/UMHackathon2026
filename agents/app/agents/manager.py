@@ -90,6 +90,8 @@ def _load_shared_context_impl(state: dict) -> dict:
     from app.memory.embedder import embed
     from app.memory.formatter import memory_block as format_memory_block
 
+    from app.agents.goals_prompt import load_active_goals_block
+
     business_id = state["business_id"]
     phone = state.get("customer_phone") or ""
 
@@ -109,7 +111,8 @@ def _load_shared_context_impl(state: dict) -> dict:
                 stock_note = f"{p.stock} in stock" if p.stock > 0 else "OUT OF STOCK"
                 desc = f" — {p.description}" if p.description else ""
                 lines.append(f"- [{p.id}] {p.name}: RM{p.price:.2f}, {stock_note}{desc}")
-        business_context = "\n".join(lines)
+        goals_block = load_active_goals_block(session, business_id)
+        business_context = "\n".join(lines) + goals_block
 
         memory_enabled = os.environ.get("MEMORY_ENABLED", "true").lower() == "true"
         memory_block = ""
