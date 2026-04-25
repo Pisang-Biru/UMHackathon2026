@@ -37,14 +37,14 @@ describe('resolveRangeBounds', () => {
     expect(b.toISOString()).toBe('2026-04-25T00:00:00.000Z')
   })
 
-  it('returns 7 days ago for "week"', () => {
+  it('returns 6 days before start-of-today for "week" (so 7 buckets ending today)', () => {
     const b = resolveRangeBounds('week', T0)!
-    expect(b.toISOString()).toBe('2026-04-18T12:00:00.000Z')
+    expect(b.toISOString()).toBe('2026-04-19T00:00:00.000Z')
   })
 
-  it('returns 30 days ago for "month"', () => {
+  it('returns 29 days before start-of-today for "month" (so 30 buckets ending today)', () => {
     const b = resolveRangeBounds('month', T0)!
-    expect(b.toISOString()).toBe('2026-03-26T12:00:00.000Z')
+    expect(b.toISOString()).toBe('2026-03-27T00:00:00.000Z')
   })
 })
 
@@ -106,6 +106,13 @@ describe('buildSeries', () => {
   it('builds ~30 daily buckets for "month"', () => {
     const s = buildSeries([], 'month', T0)
     expect(s).toHaveLength(30)
+  })
+
+  it('week series last bucket is today and includes today\'s orders', () => {
+    const todayOrder = order({ createdAt: new Date('2026-04-25T08:00:00Z'), totalAmount: 25 })
+    const s = buildSeries([todayOrder], 'week', T0)
+    expect(s).toHaveLength(7)
+    expect(s[6].revenue).toBe(25)
   })
 
   it('returns single bucket for "all" with no orders', () => {

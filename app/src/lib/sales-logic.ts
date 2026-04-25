@@ -24,13 +24,11 @@ export type SeriesPoint = { bucket: string; revenue: number }
 
 export function resolveRangeBounds(range: SalesRange, now: Date): Date | null {
   if (range === 'all') return null
-  if (range === 'today') {
-    const d = new Date(now)
-    d.setUTCHours(0, 0, 0, 0)
-    return d
-  }
+  const startOfToday = new Date(now)
+  startOfToday.setUTCHours(0, 0, 0, 0)
+  if (range === 'today') return startOfToday
   const days = range === 'week' ? 7 : 30
-  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+  return new Date(startOfToday.getTime() - (days - 1) * 24 * 60 * 60 * 1000)
 }
 
 export function computeKpis(orders: SalesOrder[]): SalesKpis {
@@ -84,9 +82,10 @@ export function buildSeries(orders: SalesOrder[], range: SalesRange, now: Date):
 
   if (range === 'week' || range === 'month') {
     const days = range === 'week' ? 7 : 30
+    const startOfToday = new Date(now)
+    startOfToday.setUTCHours(0, 0, 0, 0)
+    const start = new Date(startOfToday.getTime() - (days - 1) * 24 * 60 * 60 * 1000)
     const buckets: SeriesPoint[] = []
-    const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
-    start.setUTCHours(0, 0, 0, 0)
     for (let i = 0; i < days; i++) {
       const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000)
       buckets.push({ bucket: formatDayLabel(d, range), revenue: 0 })
