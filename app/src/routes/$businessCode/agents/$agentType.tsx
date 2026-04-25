@@ -1,7 +1,7 @@
 import React from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { fetchBusinesses } from '#/lib/business-server-fns'
-import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget } from '#/lib/agent-server-fns'
+import { fetchAgentRuns, fetchAgentBudget, fetchAgentDashboard } from '#/lib/agent-server-fns'
 import { approveAction, rejectAction } from '#/lib/inbox-server-fns'
 import { fetchAgentSales } from '#/lib/order-server-fns'
 import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
@@ -36,11 +36,11 @@ export const Route = createFileRoute('/$businessCode/agents/$agentType')({
       }
       throw redirect({ to: '/' })
     }
-    const [stats, sidebarAgents] = await Promise.all([
-      fetchAgentStats({ data: { businessId: current.id, agentType: params.agentType, rangeDays: 14 } }),
+    const [dashboard, sidebarAgents] = await Promise.all([
+      fetchAgentDashboard({ data: { businessId: current.id, agentType: params.agentType, rangeDays: 14 } }),
       fetchSidebarAgents({ data: { businessId: current.id } }),
     ])
-    return { businesses, current, agentType: params.agentType, stats, sidebarAgents }
+    return { businesses, current, agentType: params.agentType, dashboard, sidebarAgents }
   },
   component: AgentPage,
 })
@@ -57,7 +57,10 @@ function normalize(raw: any): InboxAction {
 }
 
 function AgentPage() {
-  const { businesses, current, agentType, stats, sidebarAgents } = Route.useLoaderData()
+  const { businesses, current, agentType, dashboard, sidebarAgents } = Route.useLoaderData()
+
+  const panelMods = import.meta.glob('/src/components/agents/panels/*.tsx', { eager: true }) as Record<string, { default: React.ComponentType<{ businessId: string; agentType: string }> }>
+  const Panel = panelMods[`/src/components/agents/panels/${agentType}.tsx`]?.default
   const search = Route.useSearch()
   const navigate = useNavigate()
   // Prefer the registry-sourced row from the sidebar (matches what the
@@ -147,9 +150,6 @@ function AgentPage() {
     setRunsRows((prev) => prev.map((r) => (r.id === u.id ? u : r)))
   }
 
-  const latestRun = stats.latestRun ? normalize(stats.latestRun) : null
-  const recent = stats.recent.map(normalize)
-
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#0a0a0c' }}>
       <BusinessStrip businesses={businesses} />
@@ -159,17 +159,23 @@ function AgentPage() {
         <AgentTabBar active={search.tab} onChange={setTab} />
         {search.tab === 'dashboard' && (
           <DashboardTab
-            latestRun={latestRun}
-            totals={stats.totals}
-            autoSendRate={stats.autoSendRate}
-            approvalRate={stats.approvalRate}
-            avgConfidence={stats.avgConfidence}
-            runActivity={stats.runActivity}
-            statusBreakdown={stats.statusBreakdown}
-            confidenceDistribution={stats.confidenceDistribution}
-            successRate={stats.successRate}
-            recent={recent}
-            onSelectRun={selectRun}
+            latestRun={dashboard.latestRun}
+            totals={dashboard.totals}
+            cost={dashboard.cost}
+            activity={dashboard.activity}
+            statusBreakdown={dashboard.statusBreakdown}
+            avgDurationMs={dashboard.avgDurationMs}
+            recent={dashboard.recent}
+            customPanel={Panel ? <Panel businessId={current.id} agentType={agentType} /> : null}
+            onSelectRun={(refTable, refId) => {
+              if (refTable === 'agent_action' || refTable === 'agent_action_manager') {
+                navigate({
+                  to: '/$businessCode/agents/$agentType',
+                  params: { businessCode: current.code, agentType },
+                  search: { tab: 'runs', actionId: refId },
+                } as any)
+              }
+            }}
           />
         )}
         {search.tab === 'runs' && (
