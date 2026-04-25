@@ -45,14 +45,17 @@ def make_finalize_node():
         final_reply = resolve_final_reply(state)
         action_id = _gen_cuid()
         last_verdict = state["iterations"][-1].verdict
+        business_id = state["business_id"]
+        customer_msg = last_buyer_text(state.get("messages", []))
+        confidence = jual_v1_confidence(state)
         with SessionLocal() as session:
             record = AgentAction(
                 id=action_id,
-                businessId=state["business_id"],
-                customerMsg=last_buyer_text(state.get("messages", [])),
+                businessId=business_id,
+                customerMsg=customer_msg,
                 draftReply=jual_v1_reply(state) or final_reply,
                 finalReply=final_reply,
-                confidence=jual_v1_confidence(state),
+                confidence=confidence,
                 reasoning=last_verdict.reason if last_verdict else "",
                 status=AgentActionStatus.AUTO_SENT,
                 iterations=_iterations_to_jsonb(state["iterations"]),
@@ -60,29 +63,25 @@ def make_finalize_node():
             session.add(record)
             session.commit()
         record_run(
-            business_id=record.businessId,
+            business_id=business_id,
             agent_type="customer_support",
             kind="handle_message",
-            summary=(record.customerMsg or "")[:200],
-            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
-                "FAILED" if record.status.name == "REJECTED" else "OK"
-            ),
-            payload={"confidence": record.confidence},
-            ref=("agent_action", record.id),
+            summary=(customer_msg or "")[:200],
+            status="OK",
+            payload={"confidence": confidence},
+            ref=("agent_action", action_id),
         )
         record_run(
-            business_id=record.businessId,
+            business_id=business_id,
             agent_type="manager",
             kind="evaluate",
             summary=f"manager evaluation ({len(state['iterations'])} iter)",
-            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
-                "FAILED" if record.status.name == "REJECTED" else "OK"
-            ),
+            status="OK",
             payload={
                 "iterations": len(state["iterations"]),
-                "final_action": "auto_send" if record.status.name == "AUTO_SENT" else "escalate",
+                "final_action": "auto_send",
             },
-            ref=("agent_action_manager", record.id),
+            ref=("agent_action_manager", action_id),
         )
         _enqueue_memory_write(state, action_id, final_reply)
         _log.info("manager_turn_terminal", extra={
@@ -98,14 +97,17 @@ def make_queue_for_human_node():
         action_id = _gen_cuid()
         best_draft = pick_best_draft_for_human(state)
         escalation_summary = build_escalation_summary(state)
+        business_id = state["business_id"]
+        customer_msg = last_buyer_text(state.get("messages", []))
+        confidence = jual_v1_confidence(state)
         with SessionLocal() as session:
             record = AgentAction(
                 id=action_id,
-                businessId=state["business_id"],
-                customerMsg=last_buyer_text(state.get("messages", [])),
+                businessId=business_id,
+                customerMsg=customer_msg,
                 draftReply=jual_v1_reply(state) or best_draft,
                 finalReply=None,
-                confidence=jual_v1_confidence(state),
+                confidence=confidence,
                 reasoning=escalation_summary,
                 status=AgentActionStatus.PENDING,
                 iterations=_iterations_to_jsonb(state["iterations"]),
@@ -113,29 +115,25 @@ def make_queue_for_human_node():
             session.add(record)
             session.commit()
         record_run(
-            business_id=record.businessId,
+            business_id=business_id,
             agent_type="customer_support",
             kind="handle_message",
-            summary=(record.customerMsg or "")[:200],
-            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
-                "FAILED" if record.status.name == "REJECTED" else "OK"
-            ),
-            payload={"confidence": record.confidence},
-            ref=("agent_action", record.id),
+            summary=(customer_msg or "")[:200],
+            status="OK",
+            payload={"confidence": confidence},
+            ref=("agent_action", action_id),
         )
         record_run(
-            business_id=record.businessId,
+            business_id=business_id,
             agent_type="manager",
             kind="evaluate",
             summary=f"manager evaluation ({len(state['iterations'])} iter)",
-            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
-                "FAILED" if record.status.name == "REJECTED" else "OK"
-            ),
+            status="OK",
             payload={
                 "iterations": len(state["iterations"]),
-                "final_action": "auto_send" if record.status.name == "AUTO_SENT" else "escalate",
+                "final_action": "escalate",
             },
-            ref=("agent_action_manager", record.id),
+            ref=("agent_action_manager", action_id),
         )
         _log.info("manager_turn_terminal", extra={
             "action_id": action_id, "final_action": "escalate",
