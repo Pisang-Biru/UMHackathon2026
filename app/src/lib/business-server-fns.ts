@@ -11,12 +11,49 @@ async function requireSession() {
   return session
 }
 
+type BusinessRow = {
+  id: string
+  name: string
+  code: string
+  mission: string | null
+  userId: string
+  platformFeePct: number | null
+  defaultTransportCost: number | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+function serializeBusiness(b: {
+  id: string
+  name: string
+  code: string
+  mission: string | null
+  userId: string
+  platformFeePct: { toNumber(): number } | number | null
+  defaultTransportCost: { toNumber(): number } | number | null
+  createdAt: Date
+  updatedAt: Date
+}): BusinessRow {
+  return {
+    id: b.id,
+    name: b.name,
+    code: b.code,
+    mission: b.mission,
+    userId: b.userId,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+    platformFeePct: b.platformFeePct == null ? null : Number(b.platformFeePct),
+    defaultTransportCost: b.defaultTransportCost == null ? null : Number(b.defaultTransportCost),
+  }
+}
+
 export const fetchBusinesses = createServerFn({ method: 'GET' }).handler(async () => {
   const session = await requireSession()
-  return prisma.business.findMany({
+  const rows = await prisma.business.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: 'asc' },
   })
+  return rows.map(serializeBusiness)
 })
 
 async function requireBusinessOwner(businessId: string, userId: string) {
@@ -100,7 +137,8 @@ export const createBusiness = createServerFn({ method: 'POST' })
       const existing = await prisma.business.findUnique({ where: { code: c } })
       return existing !== null
     })
-    return prisma.business.create({
+    const created = await prisma.business.create({
       data: { name: data.name, code, mission: data.mission, userId: session.user.id },
     })
+    return serializeBusiness(created)
   })
