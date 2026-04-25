@@ -63,11 +63,22 @@ def build_finance_agent(llm):
     def call_tool(state: FinanceState) -> dict:
         from langchain_core.messages import ToolMessage
         last = state["messages"][-1]
+        bid = state.get("business_id")
         out: list[BaseMessage] = []
         for tc in getattr(last, "tool_calls", []) or []:
             t = tools_by_name[tc["name"]]
+            args = dict(tc.get("args") or {})
+            # Inject the caller's business_id into any tool whose schema
+            # accepts it. The model only sees the chat — never the id — so
+            # without this, scoped tools (list_loss_orders, top_losers, …)
+            # would either fail validation or operate on a guessed id.
+            if bid:
+                schema = getattr(t, "args_schema", None)
+                fields = getattr(schema, "model_fields", None) or {}
+                if "business_id" in fields and not args.get("business_id"):
+                    args["business_id"] = bid
             try:
-                result = t.invoke(tc["args"])
+                result = t.invoke(args)
             except Exception as e:
                 result = {"error": str(e)}
             out.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))

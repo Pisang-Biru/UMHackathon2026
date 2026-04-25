@@ -29,8 +29,14 @@ _GREETING_RE = re.compile(
     re.IGNORECASE,
 )
 _IDENTITY_RE = re.compile(
+    # Identity confirmation requires an explicit closing particle
+    # (`ke?` / `kah?` / `right?`) so generic questions like
+    # "is this available?" or "are you open?" fall through to the graph.
     r"^\s*(?:hi|hai|hello|helo|salam|hey)?\s*,?\s*"
-    r"(?:ini|is\s+this|are\s+you|this\s+is)\s+.{1,40}?\s*(?:ke|kah|right)?\s*\?+\s*$",
+    r"(?:"
+    r"ini\s+.{1,40}?\s+(?:ke|kah)\s*\?+"
+    r"|is\s+this\s+.{1,40}?\s+right\s*\?+"
+    r")\s*$",
     re.IGNORECASE,
 )
 
