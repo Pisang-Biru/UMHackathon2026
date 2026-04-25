@@ -158,6 +158,7 @@ model Order {
   buyerName       String?
   buyerContact    String?
   paymentUrl      String?
+  groupId         String?
   paidAt          DateTime?
   acknowledgedAt  DateTime?
   createdAt       DateTime    @default(now())
@@ -165,4 +166,5 @@ model Order {
 
   @@map("order")
   @@index([businessId, status])
+  @@index([groupId])
 }
