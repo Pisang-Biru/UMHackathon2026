@@ -300,10 +300,11 @@ Strict ordering — each step ships independently, system stays green between st
 2. **Manager state additions**: `preloaded_fact_ids`, `last_harvested_msg_index`. Populated in `load_context` but unread. Test no regression in existing manager_e2e.
 3. **Harvest node + graph rewiring**: insert `harvest_receipts` post-Jual. With no migrated tools yet, `msg.artifact` is always None → harvest is a no-op. Test no regression.
 4. **Tool invocation convention**: change `customer_support.py:412-413` to `chosen.invoke(call)` returning a `ToolMessage`. Verify: plain @tool still produces correct ToolMessage (artifact=None). Run existing manager_e2e + customer_support tests.
-5. **Formatter rewrite**: surface `[id=…]` markers; tool unchanged. Verify search_memory render does not break Jual prompt parsing (LLM should ignore unknown bracket tokens; check live).
-6. **Migrate `check_order_status`**: switch to `content_and_artifact`. Now today's bug fixes. Run e2e screenshot reproduction.
-7. **Gate 5 update**: distinguish `uncited_tool_result` from `ungrounded_factual_answer`.
-8. **Migrate `search_memory`**: receipts for kb / product / past_action.
+5. **Migrate `check_order_status`**: switch to `content_and_artifact`. Today's screenshot bug fixes here. Run e2e screenshot reproduction.
+6. **Gate 5 update**: distinguish `uncited_tool_result` from `ungrounded_factual_answer`.
+7. **Bundle: formatter rewrite + `search_memory` migration**. Shipped as one change, not two.
+
+   Why bundled: step 7's formatter surfaces `[id=ab12cd34]` markers in the LLM-visible text. The moment those markers appear, Jual will start citing `FactRef(kind="kb", id="ab12cd34")`. If receipts aren't registered in the same release, Gate 2 fails every kb citation as ungrounded — same failure class this whole design is fixing, just relocated to KB. Short-id derivation (`sha1(chunk_id)[:8]`) is shared between the formatter render and the tool's receipt emission, so the two are one logical change anyway.
 
 Steps 1–4 are pure plumbing with zero behavior change. Steps 5–8 each have observable behavior — ship one at a time, watch dashboard for slug distribution shift.
 
