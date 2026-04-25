@@ -1,8 +1,12 @@
+import asyncio
+import json as _json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Request
+from fastapi.responses import StreamingResponse
+from redis.asyncio import from_url as redis_from_url
 from sqlalchemy import select, func
 
 from app.db import (
@@ -117,6 +121,63 @@ def events_list(
         items = [_row_to_dict(r) for r in rows]
         next_cursor = rows[-1].id if len(rows) == limit else None
         return {"items": items, "next_cursor": next_cursor}
+
+
+# ---------- SSE stream ----------
+
+@router.get("/events/stream")
+async def events_stream(
+    request: Request,
+    business_id: str = Query(...),
+    agent_id: Optional[str] = None,
+):
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+
+    async def gen():
+        client = redis_from_url(redis_url)
+        pubsub = client.pubsub()
+        await pubsub.subscribe("agent.events")
+        loop = asyncio.get_running_loop()
+        last_ping = loop.time()
+        try:
+            while True:
+                msg = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
+                now = loop.time()
+
+                if msg and msg.get("type") == "message":
+                    raw = msg["data"]
+                    if isinstance(raw, bytes):
+                        raw = raw.decode("utf-8", errors="replace")
+                    try:
+                        payload = _json.loads(raw)
+                    except Exception:
+                        continue
+                    if payload.get("business_id") != business_id:
+                        continue
+                    if agent_id and payload.get("agent_id") != agent_id:
+                        continue
+                    yield f"event: agent.event\ndata: {raw}\n\n"
+
+                if now - last_ping >= 15:
+                    yield ":ping\n\n"
+                    last_ping = now
+        finally:
+            try:
+                await pubsub.unsubscribe("agent.events")
+            except Exception:
+                pass
+            try:
+                await pubsub.aclose()
+            except Exception:
+                pass
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 # ---------- event detail ----------
