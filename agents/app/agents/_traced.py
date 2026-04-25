@@ -52,7 +52,14 @@ def traced(agent_id: str, node: str) -> Callable:
                     crit = out.get("critique")
                     if crit is not None and hasattr(crit, "model_dump"):
                         try:
-                            reasoning = crit.model_dump().get("notes") or None
+                            d = crit.model_dump()
+                            parts: list[str] = []
+                            for key in ("missing_facts", "incorrect_claims",
+                                        "tone_issues", "unanswered_questions"):
+                                vals = d.get(key) or []
+                                if isinstance(vals, list) and vals:
+                                    parts.append(f"{key}: " + "; ".join(str(v) for v in vals))
+                            reasoning = " | ".join(parts) or None
                         except Exception:
                             reasoning = None
 

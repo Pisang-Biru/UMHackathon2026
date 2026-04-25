@@ -76,3 +76,35 @@ def test_traced_records_verdict_status_from_result():
         node_fn({"business_id": "b", "conversation_id": "c"})
 
     assert calls[-1][1]["status"] == "revise"
+
+
+def test_traced_extracts_reasoning_from_critique():
+    calls = []
+
+    def fake_emit(agent_id, kind, **kw):
+        calls.append((kind, kw))
+
+    class _FakeCritique:
+        def model_dump(self):
+            return {
+                "missing_facts": ["price"],
+                "incorrect_claims": [],
+                "tone_issues": ["too curt"],
+                "unanswered_questions": [],
+                "keep_from_draft": [],
+            }
+
+    with patch("app.agents._traced.emit", side_effect=fake_emit):
+        @traced(agent_id="manager", node="evaluate")
+        def node_fn(state):
+            return {"verdict": "revise", "critique": _FakeCritique()}
+
+        node_fn({"business_id": "b", "conversation_id": "c"})
+
+    assert calls[-1][1]["status"] == "revise"
+    reasoning = calls[-1][1]["reasoning"]
+    assert reasoning is not None
+    assert "missing_facts" in reasoning
+    assert "price" in reasoning
+    assert "tone_issues" in reasoning
+    assert "too curt" in reasoning
