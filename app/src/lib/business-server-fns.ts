@@ -140,5 +140,10 @@ export const createBusiness = createServerFn({ method: 'POST' })
     const created = await prisma.business.create({
       data: { name: data.name, code, mission: data.mission, userId: session.user.id },
     })
+    if (data.mission) {
+      await prisma.goal.create({
+        data: { businessId: created.id, text: data.mission },
+      })
+    }
     return serializeBusiness(created)
   })
