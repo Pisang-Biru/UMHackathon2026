@@ -19,11 +19,17 @@ def _include_object(obj, name, type_, reflected, compare_to):
     """Only autogenerate / compare against the `agents` schema.
 
     Prisma owns `public.*` — alembic must ignore it, otherwise autogenerate
-    will offer to drop every Prisma table.
+    will offer to drop or alter Prisma-owned tables, columns, and sequences.
+    `alembic_version` itself lives in `agents` (see `version_table_schema`).
     """
     if type_ in ("table", "index", "unique_constraint", "foreign_key_constraint"):
         return getattr(obj, "schema", None) == "agents"
-    return True
+    if type_ == "column":
+        # columns inherit the schema filter from their parent table
+        return getattr(getattr(obj, "table", None), "schema", None) == "agents"
+    if type_ == "sequence":
+        return getattr(obj, "schema", None) == "agents"
+    return True  # schema-type objects: let alembic handle as-is
 
 
 def run_migrations_offline():
