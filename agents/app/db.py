@@ -44,6 +44,17 @@ class Product(Base):
     updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class Goal(Base):
+    __tablename__ = "goal"
+    id = Column(String, primary_key=True)
+    businessId = Column(String, nullable=False)
+    text = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="ACTIVE")
+    createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    deletedAt = Column(DateTime, nullable=True)
+
+
 class AgentAction(Base):
     __tablename__ = "agent_action"
     id = Column(String, primary_key=True)
