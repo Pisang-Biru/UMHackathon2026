@@ -57,6 +57,14 @@ def test_returns_empty_string_when_no_drafts():
     assert pick_best_draft_for_human(state) == ""
 
 
+def test_falls_back_to_marketing_v1_when_no_jual_drafts():
+    state = {
+        "iterations": [_it("marketing_v1", "marketing failure msg", needs_human=True)],
+        "valid_fact_ids": set(),
+    }
+    assert pick_best_draft_for_human(state) == "marketing failure msg"
+
+
 def test_humanize_known_slugs():
     assert "Refund" in humanize_reason("gate:jual_self_flagged")
     assert "couldn't answer" in humanize_reason("gate:jual_self_reported_gap")
