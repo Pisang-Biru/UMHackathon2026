@@ -62,3 +62,29 @@ def test_resolve_alert_sets_resolvedAt():
 def test_check_unknown_order_404():
     r = client.post("/finance/check/does-not-exist")
     assert r.status_code == 404
+
+
+def test_chat_endpoint_returns_reply(monkeypatch):
+    from app.routers import finance as fin_mod
+    class _FakeGraph:
+        async def ainvoke(self, state):
+            from langchain_core.messages import AIMessage
+            return {"messages": [AIMessage(content="real margin RM10.00")]}
+    monkeypatch.setattr(fin_mod, "_finance_graph", _FakeGraph())
+
+    bid, _, _ = _seed_loss()
+    r = client.post("/finance/chat", json={"business_id": bid, "message": "untung minggu ni?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["agent_id"] == "finance"
+    assert "RM10.00" in body["reply"]
+
+
+def test_is_finance_intent():
+    from app.agents.finance.agent import is_finance_intent
+    assert is_finance_intent("untung minggu ni?")
+    assert is_finance_intent("what's the margin")
+    assert is_finance_intent("kos packaging")
+    assert not is_finance_intent("hello")
+    assert not is_finance_intent("")
+    assert not is_finance_intent(None)

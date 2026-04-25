@@ -86,3 +86,15 @@ def build_finance_agent(llm):
     g.add_conditional_edges("model", route, {"tool": "tool", "end": END})
     g.add_edge("tool", "model")
     return g.compile()
+
+
+_FINANCE_KEYWORDS = (
+    "margin", "untung", "profit", "loss", "rugi",
+    "kos", "cogs", "fee", "shipping", "transport",
+    "packaging", "overhead",
+)
+
+
+def is_finance_intent(text: str) -> bool:
+    t = (text or "").lower()
+    return any(k in t for k in _FINANCE_KEYWORDS)
