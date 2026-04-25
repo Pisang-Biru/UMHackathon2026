@@ -65,6 +65,10 @@ EOF
     $COMPOSE --profile init run --rm agents-init
     ;;
 
+  agents-migrate)
+    $COMPOSE --profile init run --rm --entrypoint "" -w /app agents-init alembic upgrade head
+    ;;
+
   seed)
     SEED=true $COMPOSE --profile init run --rm agents-init
     ;;
@@ -100,6 +104,7 @@ Usage: ./scripts/dev.sh <command>
   down            stop all services (volumes preserved)
   reset           destroy volumes + restart from scratch
   init            run alembic + prisma migrate + preload bge-m3
+  agents-migrate  run alembic upgrade head only (agents schema)
   seed            same as init but force-seed demo data
   env             reload agents services after editing agents/.env
   logs [svc...]   tail logs (default: api + worker)

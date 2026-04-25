@@ -1,12 +1,14 @@
 import React from 'react'
 import {
   LayoutDashboard, CircleDot, RefreshCw, Target,
-  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag, Inbox,
+  Building2, Brain, Wheat, Settings, ChevronDown, Plus, LogOut, ShoppingBag, Inbox, TrendingUp,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '#/components/ui/scroll-area'
 import { Separator } from '#/components/ui/separator'
 import { authClient } from '#/lib/auth-client'
+import { fetchTabCounts } from '#/lib/inbox-server-fns'
 
 interface Agent {
   id: string
@@ -31,9 +33,10 @@ const NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Dashboard', route: 'dashboard' },
   { icon: Inbox, label: 'Inbox', route: 'inbox' },
   { icon: ShoppingBag, label: 'Products', route: 'products' },
+  { icon: TrendingUp, label: 'Sales', route: 'sales' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
-  { icon: Target, label: 'Goals' },
+  { icon: Target, label: 'Goals', route: 'goals' },
 ]
 
 const PRODUCT_ITEMS = [
@@ -49,6 +52,15 @@ function initials(name: string): string {
 export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps) {
   const navigate = useNavigate()
   const [signingOut, setSigningOut] = React.useState(false)
+
+  const { data: tabCounts } = useQuery({
+    queryKey: ['inbox-tab-counts', business.id],
+    queryFn: () => fetchTabCounts({ data: { businessId: business.id } }),
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
+  })
+  const unread = tabCounts?.unread ?? 0
 
   async function handleSignOut() {
     if (signingOut) return
@@ -86,31 +98,63 @@ export function Sidebar({ business, agents = [], activeAgentType }: SidebarProps
         <div className="px-2 py-2">
           {/* Main nav */}
           <div className="space-y-0.5 mb-4">
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item.label}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
-                onClick={() => {
-                  if ('route' in item && item.route) {
-                    navigate({ to: '/$businessCode/' + item.route as any, params: { businessCode: business.code } } as any)
-                  }
-                }}
-                style={{
-                  color: '#555',
-                }}
-              >
-                <item.icon size={13} />
-                <span className="flex-1 text-left">{item.label}</span>
-                {item.count != null && (
-                  <span
-                    className="text-[9px] px-1.5 py-0.5 rounded-full"
-                    style={{ background: '#1a1a1f', color: '#444', fontFamily: 'var(--font-mono)' }}
-                  >
-                    {item.count}
+            {NAV_ITEMS.map((item) => {
+              const isInbox = 'route' in item && item.route === 'inbox'
+              const showUnread = isInbox && unread > 0
+              return (
+                <button
+                  key={item.label}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5 relative"
+                  onClick={() => {
+                    if ('route' in item && item.route) {
+                      navigate({ to: '/$businessCode/' + item.route as any, params: { businessCode: business.code } } as any)
+                    }
+                  }}
+                  style={{
+                    color: showUnread ? '#e8e6e2' : '#555',
+                  }}
+                >
+                  <span className="relative inline-flex">
+                    <item.icon size={13} />
+                    {showUnread && (
+                      <span
+                        className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full"
+                        style={{
+                          background: '#ff3b5c',
+                          boxShadow: '0 0 0 2px #0c0c0f, 0 0 8px rgba(255,59,92,0.7)',
+                          animation: 'pulse-dot 1.6s ease-in-out infinite',
+                        }}
+                      />
+                    )}
                   </span>
-                )}
-              </button>
-            ))}
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {showUnread && (
+                    <span
+                      className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none tabular-nums"
+                      style={{
+                        background: 'linear-gradient(135deg, #ff3b5c 0%, #ff6b35 100%)',
+                        color: '#fff',
+                        fontFamily: 'var(--font-mono)',
+                        letterSpacing: '0.02em',
+                        boxShadow: '0 0 12px rgba(255,59,92,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+                        minWidth: '16px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                  )}
+                  {!showUnread && item.count != null && (
+                    <span
+                      className="text-[9px] px-1.5 py-0.5 rounded-full"
+                      style={{ background: '#1a1a1f', color: '#444', fontFamily: 'var(--font-mono)' }}
+                    >
+                      {item.count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
 
           <Separator style={{ background: '#1a1a1e' }} className="my-2" />

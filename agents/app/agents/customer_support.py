@@ -100,11 +100,14 @@ def _enqueue_from_state(state, action_id: str):
 
 
 def _build_context(business_id: str) -> str:
+    from app.agents.goals_prompt import load_active_goals_block
+
     with SessionLocal() as session:
         business = session.query(Business).filter(Business.id == business_id).first()
         if not business:
             raise ValueError(f"Business {business_id} not found")
         products = session.query(Product).filter(Product.businessId == business_id).all()
+        goals_block = load_active_goals_block(session, business_id)
 
     lines = [f"Business: {business.name}"]
     if business.mission:
@@ -119,7 +122,7 @@ def _build_context(business_id: str) -> str:
     else:
         lines.append("\nNo products listed yet.")
 
-    return "\n".join(lines)
+    return "\n".join(lines) + goals_block
 
 
 def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: str | None = None) -> tuple[str, str]:
@@ -159,6 +162,8 @@ def _create_cart(
     product_ids_for_reindex: list[str] = []
 
     with SessionLocal() as session:
+        business = session.query(Business).filter(Business.id == business_id).first()
+        default_transport = business.defaultTransportCost if business else None
         for product_id, qty in norm:
             product = session.query(Product).filter(
                 Product.id == product_id,
@@ -196,6 +201,7 @@ def _create_cart(
                 buyerContact=buyer_contact or None,
                 paymentUrl=payment_url,
                 groupId=group_id,
+                transportCost=default_transport,
             )
             session.add(order)
             lines.append({
@@ -249,7 +255,7 @@ After any tool calls, respond with valid JSON only, no other text:
   "reasoning": "<one sentence explaining your confidence>",
   "addressed_questions": ["<buyer question you answered>", ...],
   "unaddressed_questions": ["<buyer question you did NOT answer, verbatim>", ...],
-  "facts_used": [{{"kind": "product|order|kb|memory|memory:past_action|payment_link", "id": "<id>"}}, ...],
+  "facts_used": [{{"kind": "product|order|kb|memory|memory:past_action", "id": "<id>"}}, ...],
   "needs_human": <true only if refund / complaint / out-of-scope, else false>
 }}
 
@@ -496,8 +502,10 @@ def build_customer_support_agent(llm):
         return {"business_context": context}
 
     def _make_tool(business_id: str, customer_phone: str):
-        @tool
-        def create_payment_link(items: list[dict]) -> str:
+        from app.schemas.agent_io import PaymentLinkReceipt, OrderReceipt, ProductReceipt
+
+        @tool(response_format="content_and_artifact")
+        def create_payment_link(items: list[dict]) -> tuple[str, list]:
             """Create a SINGLE payment link covering one or more line items.
             Args:
                 items: list of {"product_id": "<id>", "qty": <positive int>} — one entry per
@@ -506,12 +514,16 @@ def build_customer_support_agent(llm):
             Returns one URL the buyer can open to pay for the whole cart, or an error message.
             """
             try:
-                _group_id, payment_url, _lines = _create_cart(
+                group_id, payment_url, lines = _create_cart(
                     business_id, items or [], buyer_contact=customer_phone or None
                 )
-                return payment_url
+                receipts: list = [PaymentLinkReceipt(id=group_id)]
+                for line in lines:
+                    receipts.append(OrderReceipt(id=line["order_id"]))
+                    receipts.append(ProductReceipt(id=line["product_id"]))
+                return payment_url, receipts
             except Exception as e:
-                return f"ERROR: {e}"
+                return f"ERROR: {e}", []
         return create_payment_link
 
     async def draft_reply(state: SupportAgentState) -> dict:
@@ -580,7 +592,7 @@ def build_customer_support_agent(llm):
             "Produce the final reply as a single JSON object matching this schema:\n"
             '{"reply": "<text>", "confidence": <float>, "reasoning": "<sentence>", '
             '"addressed_questions": [...], "unaddressed_questions": [...], '
-            '"facts_used": [{"kind":"product|order|kb|memory|memory:past_action|payment_link","id":"<id>"}], '
+            '"facts_used": [{"kind":"product|order|kb|memory|memory:past_action","id":"<id>"}], '
             '"needs_human": <bool>}\n'
             "Output ONLY the JSON object. No markdown fences, no prose before or after."
         ))

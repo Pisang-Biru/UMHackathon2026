@@ -1,5 +1,7 @@
 # agents/app/agents/manager.py
 import logging
+import os
+import time
 from typing import Literal, Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -83,15 +85,29 @@ async def _harvest_receipts_impl(state: dict) -> dict:
     }
 
 
-def _load_shared_context_impl(state: dict) -> dict:
-    """Loads business context, memory, valid_fact_ids. Module-level so tests can monkeypatch."""
-    import os
-    from app.memory import repo as memory_repo
-    from app.memory.embedder import embed
-    from app.memory.formatter import memory_block as format_memory_block
+# Per-business cache of (business_context, product_fact_ids, business_name).
+# TTL bounds staleness when product/goal edits land out of band.
+_BUSINESS_CTX_CACHE: dict[str, tuple[float, str, set[str], str]] = {}
+_BUSINESS_CTX_TTL_S = float(os.environ.get("BUSINESS_CTX_TTL_S", "60"))
 
-    business_id = state["business_id"]
-    phone = state.get("customer_phone") or ""
+
+def invalidate_business_context_cache(business_id: str | None = None) -> None:
+    """Drop cache entry — call after product/goal/business mutations.
+    Pass None to clear all entries (test helper)."""
+    if business_id is None:
+        _BUSINESS_CTX_CACHE.clear()
+    else:
+        _BUSINESS_CTX_CACHE.pop(business_id, None)
+
+
+def _load_business_context_cached(business_id: str) -> tuple[str, set[str], str]:
+    """Returns (business_context_str, product_fact_ids, business_name)."""
+    from app.agents.goals_prompt import load_active_goals_block
+
+    now = time.monotonic()
+    cached = _BUSINESS_CTX_CACHE.get(business_id)
+    if cached and (now - cached[0]) < _BUSINESS_CTX_TTL_S:
+        return cached[1], cached[2], cached[3]
 
     with SessionLocal() as session:
         business = session.query(Business).filter(Business.id == business_id).first()
@@ -99,7 +115,6 @@ def _load_shared_context_impl(state: dict) -> dict:
             raise ValueError(f"Business {business_id} not found")
         products = session.query(Product).filter(Product.businessId == business_id).all()
 
-        # Build business_context same shape as customer_support._build_context
         lines = [f"Business: {business.name}"]
         if business.mission:
             lines.append(f"About: {business.mission}")
@@ -109,8 +124,27 @@ def _load_shared_context_impl(state: dict) -> dict:
                 stock_note = f"{p.stock} in stock" if p.stock > 0 else "OUT OF STOCK"
                 desc = f" — {p.description}" if p.description else ""
                 lines.append(f"- [{p.id}] {p.name}: RM{p.price:.2f}, {stock_note}{desc}")
-        business_context = "\n".join(lines)
+        goals_block = load_active_goals_block(session, business_id)
+        business_context = "\n".join(lines) + goals_block
+        product_ids = {f"product:{p.id}" for p in products}
+        business_name = business.name
 
+    _BUSINESS_CTX_CACHE[business_id] = (now, business_context, product_ids, business_name)
+    return business_context, product_ids, business_name
+
+
+def _load_shared_context_impl(state: dict) -> dict:
+    """Loads business context, memory, valid_fact_ids. Module-level so tests can monkeypatch."""
+    from app.memory import repo as memory_repo
+    from app.memory.embedder import embed
+    from app.memory.formatter import memory_block as format_memory_block
+
+    business_id = state["business_id"]
+    phone = state.get("customer_phone") or ""
+
+    business_context, product_fact_ids, _bname = _load_business_context_cached(business_id)
+
+    with SessionLocal() as session:
         memory_enabled = os.environ.get("MEMORY_ENABLED", "true").lower() == "true"
         memory_block = ""
         if memory_enabled and phone:
@@ -127,7 +161,7 @@ def _load_shared_context_impl(state: dict) -> dict:
                 summaries = memory_repo.search_summaries(session, business_id, phone, q_vec, k=3, min_sim=0.5)
             memory_block = format_memory_block(phone=phone, recent_turns=recent, summaries=summaries)
 
-    valid_ids = {f"product:{p.id}" for p in products}
+    valid_ids = set(product_fact_ids)
 
     # Negative-receipt grounding for "no orders found".
     #
@@ -190,7 +224,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         }
         try:
             emit(
-                agent_id="manager",
+                agent_id="customer_support",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),
@@ -201,7 +235,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         result = await jual_graph.ainvoke(sub_state)
         try:
             emit(
-                agent_id="customer_support",
+                agent_id="manager",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),
@@ -248,7 +282,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         }
         try:
             emit(
-                agent_id="manager",
+                agent_id="customer_support",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),
@@ -259,7 +293,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         result = await jual_graph.ainvoke(sub_state)
         try:
             emit(
-                agent_id="customer_support",
+                agent_id="manager",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),

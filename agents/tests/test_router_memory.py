@@ -24,7 +24,7 @@ def test_support_chat_accepts_customer_phone(monkeypatch):
         "business_id": "biz1",
         "customer_id": "c1",
         "customer_phone": "+60123456789",
-        "message": "hi",
+        "message": "saya nak tanya pasal pesanan",
     })
     assert r.status_code == 200
     assert captured["customer_phone"] == "+60123456789"
@@ -44,7 +44,7 @@ def test_support_chat_without_phone_defaults_empty(monkeypatch):
     r = client.post("/agent/support/chat", json={
         "business_id": "biz1",
         "customer_id": "c1",
-        "message": "hi",
+        "message": "saya nak tanya pasal pesanan",
     })
     assert r.status_code == 200
     assert captured["customer_phone"] == ""

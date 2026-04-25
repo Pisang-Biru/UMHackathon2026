@@ -92,10 +92,26 @@ def test_gate2_wildcard_does_not_admit_other_kinds():
         d,
         valid_fact_ids={"order:none:*"},
         revision_count=0,
-        messages=_msgs("ada barang?"),
+        messages=_msgs("berapa harga barang?"),
     )
     assert r.verdict == "rewrite"
     assert r.reason_slug == "ungrounded_fact:product:none:fake"
+
+
+def test_gate2_non_factual_msg_strips_ungrounded_no_rewrite():
+    """Non-factual buyer messages (greetings, identity confirmations) should
+    not trigger an expensive rewrite when jual cited an invented id —
+    strip the bogus citation in place and let the gate chain continue."""
+    d = _draft(facts_used=[FactRef(kind="product", id="invented")])
+    r = run_gates(
+        d,
+        valid_fact_ids={"product:real"},
+        revision_count=0,
+        messages=_msgs("hi ini kedai rembayung ke?"),
+    )
+    assert r.verdict == "pass"
+    assert d.facts_used == []
+    assert "hallucinated_fact_stripped_non_factual" in r.passed_gates
 
 
 def test_gate5_no_tool_no_facts_still_escalates():
@@ -132,7 +148,9 @@ def test_factual_q_regex_ignores_idioms():
     # "terima kasih ada jumpa lagi" must not match gate 5 via bare "ada"
     d = _draft(facts_used=[])
     r = run_gates(d, valid_fact_ids=set(), revision_count=0, messages=_msgs("terima kasih ada jumpa lagi"))
-    assert r.verdict is None   # no factual-Q hit
+    # No factual-Q hit + non-factual + clean draft → fast-path auto-pass.
+    assert r.verdict == "pass"
+    assert r.reason_slug == "non_factual_clean_draft"
 
 
 def test_gate3_critique_populated_on_revise():
@@ -170,7 +188,8 @@ def test_factual_q_regex_matches_expected_phrases(phrase):
 def test_factual_q_regex_ignores_non_factual(phrase):
     d = _draft(facts_used=[])
     r = run_gates(d, valid_fact_ids=set(), revision_count=0, messages=_msgs(phrase))
-    assert r.verdict is None, f"expected no gate 5 hit on {phrase!r}, got {r.verdict}"
+    # Non-factual + clean draft now auto-passes without LLM evaluator.
+    assert r.verdict == "pass", f"expected fast-path pass on {phrase!r}, got {r.verdict}"
 
 
 def test_gate5_no_facts_no_retrieval_says_ungrounded():

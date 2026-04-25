@@ -12,8 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PayOrderIdRouteImport } from './routes/pay/$orderId'
+import { Route as BusinessCodeSettingsRouteImport } from './routes/$businessCode/settings'
+import { Route as BusinessCodeSalesRouteImport } from './routes/$businessCode/sales'
 import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode/products'
 import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/inbox'
+import { Route as BusinessCodeGoalsRouteImport } from './routes/$businessCode/goals'
 import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as BusinessCodeAgentsAgentTypeRouteImport } from './routes/$businessCode/agents/$agentType'
@@ -33,6 +36,16 @@ const PayOrderIdRoute = PayOrderIdRouteImport.update({
   path: '/pay/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BusinessCodeSettingsRoute = BusinessCodeSettingsRouteImport.update({
+  id: '/$businessCode/settings',
+  path: '/$businessCode/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessCodeSalesRoute = BusinessCodeSalesRouteImport.update({
+  id: '/$businessCode/sales',
+  path: '/$businessCode/sales',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BusinessCodeProductsRoute = BusinessCodeProductsRouteImport.update({
   id: '/$businessCode/products',
   path: '/$businessCode/products',
@@ -41,6 +54,11 @@ const BusinessCodeProductsRoute = BusinessCodeProductsRouteImport.update({
 const BusinessCodeInboxRoute = BusinessCodeInboxRouteImport.update({
   id: '/$businessCode/inbox',
   path: '/$businessCode/inbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessCodeGoalsRoute = BusinessCodeGoalsRouteImport.update({
+  id: '/$businessCode/goals',
+  path: '/$businessCode/goals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BusinessCodeDashboardRoute = BusinessCodeDashboardRouteImport.update({
@@ -64,8 +82,11 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/goals': typeof BusinessCodeGoalsRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/$businessCode/sales': typeof BusinessCodeSalesRoute
+  '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -74,8 +95,11 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/goals': typeof BusinessCodeGoalsRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/$businessCode/sales': typeof BusinessCodeSalesRoute
+  '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -85,8 +109,11 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$businessCode/dashboard': typeof BusinessCodeDashboardRoute
+  '/$businessCode/goals': typeof BusinessCodeGoalsRoute
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
+  '/$businessCode/sales': typeof BusinessCodeSalesRoute
+  '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -97,8 +124,11 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$businessCode/dashboard'
+    | '/$businessCode/goals'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
+    | '/$businessCode/sales'
+    | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
@@ -107,8 +137,11 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$businessCode/dashboard'
+    | '/$businessCode/goals'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
+    | '/$businessCode/sales'
+    | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
@@ -117,8 +150,11 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$businessCode/dashboard'
+    | '/$businessCode/goals'
     | '/$businessCode/inbox'
     | '/$businessCode/products'
+    | '/$businessCode/sales'
+    | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
@@ -128,8 +164,11 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   BusinessCodeDashboardRoute: typeof BusinessCodeDashboardRoute
+  BusinessCodeGoalsRoute: typeof BusinessCodeGoalsRoute
   BusinessCodeInboxRoute: typeof BusinessCodeInboxRoute
   BusinessCodeProductsRoute: typeof BusinessCodeProductsRoute
+  BusinessCodeSalesRoute: typeof BusinessCodeSalesRoute
+  BusinessCodeSettingsRoute: typeof BusinessCodeSettingsRoute
   PayOrderIdRoute: typeof PayOrderIdRoute
   BusinessCodeAgentsAgentTypeRoute: typeof BusinessCodeAgentsAgentTypeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -158,6 +197,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PayOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/settings': {
+      id: '/$businessCode/settings'
+      path: '/$businessCode/settings'
+      fullPath: '/$businessCode/settings'
+      preLoaderRoute: typeof BusinessCodeSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$businessCode/sales': {
+      id: '/$businessCode/sales'
+      path: '/$businessCode/sales'
+      fullPath: '/$businessCode/sales'
+      preLoaderRoute: typeof BusinessCodeSalesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$businessCode/products': {
       id: '/$businessCode/products'
       path: '/$businessCode/products'
@@ -170,6 +223,13 @@ declare module '@tanstack/react-router' {
       path: '/$businessCode/inbox'
       fullPath: '/$businessCode/inbox'
       preLoaderRoute: typeof BusinessCodeInboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$businessCode/goals': {
+      id: '/$businessCode/goals'
+      path: '/$businessCode/goals'
+      fullPath: '/$businessCode/goals'
+      preLoaderRoute: typeof BusinessCodeGoalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$businessCode/dashboard': {
@@ -200,8 +260,11 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   BusinessCodeDashboardRoute: BusinessCodeDashboardRoute,
+  BusinessCodeGoalsRoute: BusinessCodeGoalsRoute,
   BusinessCodeInboxRoute: BusinessCodeInboxRoute,
   BusinessCodeProductsRoute: BusinessCodeProductsRoute,
+  BusinessCodeSalesRoute: BusinessCodeSalesRoute,
+  BusinessCodeSettingsRoute: BusinessCodeSettingsRoute,
   PayOrderIdRoute: PayOrderIdRoute,
   BusinessCodeAgentsAgentTypeRoute: BusinessCodeAgentsAgentTypeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
