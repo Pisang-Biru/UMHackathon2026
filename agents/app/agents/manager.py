@@ -53,6 +53,28 @@ class ManagerState(TypedDict, total=False):
     best_draft: str | None
 
 
+async def _harvest_receipts_impl(state: dict) -> dict:
+    """Read ToolMessage.artifact entries appended since last_harvested_msg_index;
+    merge their (kind, id) tuples into valid_fact_ids. Idempotent via cursor.
+
+    Plain @tool returns produce ToolMessage with artifact=None — harvest no-ops on
+    those, allowing tools to migrate one at a time.
+    """
+    from langchain_core.messages import ToolMessage
+    msgs = state.get("messages", []) or []
+    start = state.get("last_harvested_msg_index", 0)
+    new_ids = set(state.get("valid_fact_ids", set()))
+    for msg in msgs[start:]:
+        if not isinstance(msg, ToolMessage):
+            continue
+        for r in (getattr(msg, "artifact", None) or []):
+            new_ids.add(f"{r.kind}:{r.id}")
+    return {
+        "valid_fact_ids": new_ids,
+        "last_harvested_msg_index": len(msgs),
+    }
+
+
 def _load_shared_context_impl(state: dict) -> dict:
     """Loads business context, memory, valid_fact_ids. Module-level so tests can monkeypatch."""
     import os
@@ -286,6 +308,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
     graph.add_node("load_shared_context", _t("load_shared_context")(load_shared_context))
     graph.add_node("dispatch_jual", _t("dispatch_jual")(dispatch_jual))
     graph.add_node("dispatch_jual_revise", _t("dispatch_jual_revise")(dispatch_jual_revise))
+    graph.add_node("harvest_receipts", _t("harvest_receipts")(_harvest_receipts_impl))
     graph.add_node("evaluate", _t("evaluate")(evaluate))
     graph.add_node("manager_rewrite", _t("manager_rewrite")(manager_rewrite))
     graph.add_node("gates_only_check", _t("gates_only_check")(gates_only_check))
@@ -294,14 +317,15 @@ def build_manager_graph(*, jual_llm, manager_llm):
 
     graph.add_edge(START, "load_shared_context")
     graph.add_edge("load_shared_context", "dispatch_jual")
-    graph.add_edge("dispatch_jual", "evaluate")
+    graph.add_edge("dispatch_jual", "harvest_receipts")
+    graph.add_edge("harvest_receipts", "evaluate")
     graph.add_conditional_edges("evaluate", route_verdict, {
         "finalize": "finalize",
         "dispatch_jual_revise": "dispatch_jual_revise",
         "manager_rewrite": "manager_rewrite",
         "queue_for_human": "queue_for_human",
     })
-    graph.add_edge("dispatch_jual_revise", "evaluate")
+    graph.add_edge("dispatch_jual_revise", "harvest_receipts")
     graph.add_edge("manager_rewrite", "gates_only_check")
     graph.add_conditional_edges("gates_only_check", route_gates_only, {
         "finalize": "finalize",
