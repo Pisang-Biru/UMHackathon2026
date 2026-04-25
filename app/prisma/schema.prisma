@@ -149,6 +149,8 @@ model AgentAction {
   outputTokens  Int?
   cachedTokens  Int?
   costUsd       Decimal? @db.Decimal(10, 6)
+  iterations    Json     @default("[]")
+  approvedAt    DateTime? @db.Timestamptz()
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
