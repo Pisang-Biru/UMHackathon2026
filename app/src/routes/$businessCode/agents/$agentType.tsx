@@ -1,7 +1,7 @@
 import React from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { fetchBusinesses } from '#/lib/business-server-fns'
-import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget, KNOWN_AGENT_TYPES } from '#/lib/agent-server-fns'
+import { fetchAgentStats, fetchAgentRuns, fetchAgentBudget } from '#/lib/agent-server-fns'
 import { approveAction, rejectAction } from '#/lib/inbox-server-fns'
 import { fetchAgentSales } from '#/lib/order-server-fns'
 import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
@@ -28,9 +28,6 @@ export const Route = createFileRoute('/$businessCode/agents/$agentType')({
     }
   },
   loader: async ({ params }) => {
-    if (!(KNOWN_AGENT_TYPES as readonly string[]).includes(params.agentType)) {
-      throw redirect({ to: '/$businessCode/inbox', params: { businessCode: params.businessCode } })
-    }
     const businesses = await fetchBusinesses()
     const current = businesses.find((b) => b.code === params.businessCode)
     if (!current) {
