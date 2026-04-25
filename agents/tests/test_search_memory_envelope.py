@@ -88,3 +88,28 @@ def test_search_memory_db_error_returns_no_receipts(mock_embed_and_session):
         msg = tool.invoke(_toolcall({"query": "x", "kind": "kb"}))
     assert msg.content.startswith("ERROR")
     assert (msg.artifact or []) == []
+
+
+def test_product_empty_emits_single_negative_product_receipt(mock_embed_and_session):
+    with patch("app.agents.customer_support.memory_repo") as mrepo:
+        mrepo.search_products.return_value = []
+        tool = _make_search_memory_tool("biz_1")
+        msg = tool.invoke(_toolcall({"query": "widget", "kind": "product"}))
+    assert "No results" in msg.content
+    assert len(msg.artifact) == 1
+    r = msg.artifact[0]
+    assert isinstance(r, ProductReceipt)
+    assert r.id.startswith("none:")
+
+
+def test_past_action_empty_emits_single_negative_past_action_receipt(mock_embed_and_session):
+    with patch("app.agents.customer_support.memory_repo") as mrepo:
+        mrepo.search_past_actions.return_value = []
+        tool = _make_search_memory_tool("biz_1")
+        msg = tool.invoke(_toolcall({"query": "refund", "kind": "past_action"}))
+    assert "No results" in msg.content
+    assert len(msg.artifact) == 1
+    r = msg.artifact[0]
+    assert isinstance(r, PastActionReceipt)
+    assert r.id.startswith("none:")
+    assert r.full_id == "-"
