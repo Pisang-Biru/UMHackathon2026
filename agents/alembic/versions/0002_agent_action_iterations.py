@@ -16,16 +16,40 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        "agent_action",
-        sa.Column(
-            "iterations",
-            postgresql.JSONB(),
-            nullable=False,
-            server_default=sa.text("'[]'::jsonb"),
-        ),
+    op.execute(
+        """
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'agent_action'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'agent_action'
+              AND column_name = 'iterations'
+          ) THEN
+            ALTER TABLE public.agent_action
+            ADD COLUMN iterations JSONB DEFAULT '[]'::jsonb NOT NULL;
+          END IF;
+        END$$;
+        """
     )
 
 
 def downgrade():
-    op.drop_column("agent_action", "iterations")
+    op.execute(
+        """
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'agent_action'
+              AND column_name = 'iterations'
+          ) THEN
+            ALTER TABLE public.agent_action DROP COLUMN iterations;
+          END IF;
+        END$$;
+        """
+    )

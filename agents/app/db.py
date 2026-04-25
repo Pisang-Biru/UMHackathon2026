@@ -194,5 +194,23 @@ class AgentEvent(Base):
     tokens_out = Column(Integer, nullable=True)
 
 
+class InstagramAuthSession(Base):
+    __tablename__ = "instagram_auth_sessions"
+    __table_args__ = {"schema": "agents"}
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    business_id = Column(Text, nullable=False, unique=True)
+    instagram_username = Column(Text, nullable=False)
+    session_settings = Column(JSONB, nullable=False)
+    is_active = Column(Boolean, nullable=False, server_default=text("true"))
+    last_login_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 # Register memory models with Base.metadata so Alembic sees them.
 from app.memory import models as _memory_models  # noqa: F401,E402

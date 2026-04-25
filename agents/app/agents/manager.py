@@ -13,6 +13,7 @@ from app.schemas.agent_io import (
     StructuredReply, ManagerCritique, IterationEntry,
 )
 from app.agents.customer_support import build_customer_support_agent
+from app.agents.marketing import is_marketing_request, run_marketing_post
 from app.agents.manager_evaluator import make_evaluate_node
 from app.agents.manager_rewrite import make_manager_rewrite_node, gates_only_check
 from app.agents.manager_terminal import make_finalize_node, make_queue_for_human_node
@@ -52,6 +53,7 @@ class ManagerState(TypedDict, total=False):
     final_reply: str | None
     final_action: Literal["auto_send", "escalate"] | None
     final_action_hint: Literal["auto_send", "escalate"] | None
+    specialist: Literal["sales", "marketing"] | None
     action_id: str | None
     best_draft: str | None
 
@@ -265,6 +267,83 @@ def build_manager_graph(*, jual_llm, manager_llm):
             "iterations": [*state["iterations"], new_entry],
         }
 
+    async def route_specialist(state: ManagerState) -> dict:
+        from langchain_core.messages import HumanMessage
+
+        buyer_msg = ""
+        for m in reversed(state.get("messages", [])):
+            if isinstance(m, HumanMessage) and isinstance(m.content, str):
+                buyer_msg = m.content
+                break
+        specialist: Literal["sales", "marketing"] = "marketing" if is_marketing_request(buyer_msg) else "sales"
+        return {"specialist": specialist}
+
+    async def dispatch_marketing(state: ManagerState) -> dict:
+        from langchain_core.messages import HumanMessage
+
+        buyer_msg = ""
+        for m in reversed(state.get("messages", [])):
+            if isinstance(m, HumanMessage) and isinstance(m.content, str):
+                buyer_msg = m.content
+                break
+
+        try:
+            emit(
+                agent_id="marketing",
+                kind="handoff",
+                business_id=state.get("business_id"),
+                conversation_id=state.get("customer_id"),
+                summary="manager → marketing (generate + post)",
+            )
+        except Exception:
+            pass
+
+        try:
+            post = run_marketing_post(
+                business_id=state["business_id"],
+                user_message=buyer_msg,
+            )
+            reply = (
+                f"Done. I posted {post['count']} marketing slide(s) to Instagram "
+                f"for this business. media_id={post['media_id']}"
+            )
+            draft = StructuredReply(
+                reply=reply,
+                confidence=0.95,
+                reasoning="Generated images via OpenAI and posted to Instagram with saved session.",
+                addressed_questions=[buyer_msg] if buyer_msg else [],
+                unaddressed_questions=[],
+                facts_used=[],
+                needs_human=False,
+            )
+            entry = IterationEntry(stage="marketing_v1", draft=draft)
+            return {
+                "jual_draft": draft,
+                "iterations": [*state["iterations"], entry],
+                "final_reply": draft.reply,
+                "final_action_hint": "auto_send",
+            }
+        except Exception as e:
+            draft = StructuredReply(
+                reply=(
+                    "I could not complete Instagram marketing posting automatically. "
+                    f"Reason: {e}"
+                ),
+                confidence=0.2,
+                reasoning="Marketing integration failed and needs human review.",
+                addressed_questions=[],
+                unaddressed_questions=[buyer_msg] if buyer_msg else ["marketing request"],
+                facts_used=[],
+                needs_human=True,
+            )
+            entry = IterationEntry(stage="marketing_v1", draft=draft)
+            return {
+                "jual_draft": draft,
+                "iterations": [*state["iterations"], entry],
+                "final_action_hint": "escalate",
+                "best_draft": draft.reply,
+            }
+
     async def dispatch_jual_revise(state: ManagerState) -> dict:
         sub_state = {
             "messages": state["messages"],
@@ -343,6 +422,9 @@ def build_manager_graph(*, jual_llm, manager_llm):
     def route_gates_only(state: ManagerState) -> Literal["finalize", "queue_for_human"]:
         return "finalize" if state.get("final_action_hint") == "auto_send" else "queue_for_human"
 
+    def route_specialist_next(state: ManagerState) -> Literal["dispatch_jual", "dispatch_marketing"]:
+        return "dispatch_marketing" if state.get("specialist") == "marketing" else "dispatch_jual"
+
     async def _finalize_with_emit(state):
         out = await finalize(state)
         try:
@@ -380,7 +462,9 @@ def build_manager_graph(*, jual_llm, manager_llm):
 
     graph = StateGraph(ManagerState)
     graph.add_node("load_shared_context", _t("load_shared_context")(load_shared_context))
+    graph.add_node("route_specialist", _t("route_specialist")(route_specialist))
     graph.add_node("dispatch_jual", _t("dispatch_jual")(dispatch_jual))
+    graph.add_node("dispatch_marketing", _t("dispatch_marketing")(dispatch_marketing))
     graph.add_node("dispatch_jual_revise", _t("dispatch_jual_revise")(dispatch_jual_revise))
     graph.add_node("harvest_receipts", _t("harvest_receipts")(_harvest_receipts_impl))
     graph.add_node("evaluate", _t("evaluate")(evaluate))
@@ -390,8 +474,13 @@ def build_manager_graph(*, jual_llm, manager_llm):
     graph.add_node("queue_for_human", _t("queue_for_human")(_queue_with_emit))
 
     graph.add_edge(START, "load_shared_context")
-    graph.add_edge("load_shared_context", "dispatch_jual")
+    graph.add_edge("load_shared_context", "route_specialist")
+    graph.add_conditional_edges("route_specialist", route_specialist_next, {
+        "dispatch_jual": "dispatch_jual",
+        "dispatch_marketing": "dispatch_marketing",
+    })
     graph.add_edge("dispatch_jual", "harvest_receipts")
+    graph.add_edge("dispatch_marketing", "gates_only_check")
     graph.add_edge("harvest_receipts", "evaluate")
     graph.add_conditional_edges("evaluate", route_verdict, {
         "finalize": "finalize",

@@ -1,7 +1,10 @@
 import React from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { fetchBusinesses } from '#/lib/business-server-fns'
-import { fetchBusinessSettings, updateBusinessSettings } from '#/lib/business-server-fns'
+import {
+  fetchBusinessSettings,
+  updateBusinessSettings,
+} from '#/lib/business-server-fns'
 import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
 import { Sidebar } from '#/components/sidebar'
@@ -35,10 +38,10 @@ function SettingsPage() {
 
   // platformFeePct stored as 0..1; display as percentage (multiply by 100)
   const [platformFeePct, setPlatformFeePct] = React.useState(
-    (settings.platformFeePct * 100).toFixed(2)
+    (settings.platformFeePct * 100).toFixed(2),
   )
   const [defaultTransportCost, setDefaultTransportCost] = React.useState(
-    settings.defaultTransportCost.toFixed(2)
+    settings.defaultTransportCost.toFixed(2),
   )
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -83,13 +86,19 @@ function SettingsPage() {
   )
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#0a0a0c' }}>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{ background: '#0a0a0c' }}
+    >
       <BusinessStrip businesses={businesses} />
       <Sidebar business={current} agents={sidebarAgents} />
 
       <main className="flex-1 overflow-auto" style={{ background: '#111113' }}>
         {/* Header */}
-        <div className="px-8 pt-6 pb-5 border-b" style={{ borderColor: '#1a1a1e' }}>
+        <div
+          className="px-8 pt-6 pb-5 border-b"
+          style={{ borderColor: '#1a1a1e' }}
+        >
           <div>
             <p
               className="text-[9px] uppercase tracking-[0.2em] mb-1"
@@ -129,10 +138,14 @@ function SettingsPage() {
                   value={platformFeePct}
                   onChange={(e) => setPlatformFeePct(e.target.value)}
                   placeholder="5.00"
-                  style={{ background: '#16161a', borderColor: '#2a2a32', color: '#e8e6e2' }}
+                  style={{
+                    background: '#16161a',
+                    borderColor: '#2a2a32',
+                    color: '#e8e6e2',
+                  }}
                 />
                 <span className="text-[10px]" style={{ color: '#555' }}>
-                  e.g. enter 5 for 5% — stored as 0.05 internally
+                  e.g. enter 5 for 5% - stored as 0.05 internally
                 </span>
               </div>
 
@@ -145,7 +158,11 @@ function SettingsPage() {
                   value={defaultTransportCost}
                   onChange={(e) => setDefaultTransportCost(e.target.value)}
                   placeholder="0.00"
-                  style={{ background: '#16161a', borderColor: '#2a2a32', color: '#e8e6e2' }}
+                  style={{
+                    background: '#16161a',
+                    borderColor: '#2a2a32',
+                    color: '#e8e6e2',
+                  }}
                 />
               </div>
             </div>

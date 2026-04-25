@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PayOrderIdRouteImport } from './routes/pay/$orderId'
+import { Route as BusinessCodeWhatsappRouteImport } from './routes/$businessCode/whatsapp'
 import { Route as BusinessCodeSettingsRouteImport } from './routes/$businessCode/settings'
 import { Route as BusinessCodeSalesRouteImport } from './routes/$businessCode/sales'
 import { Route as BusinessCodeProductsRouteImport } from './routes/$businessCode/products'
@@ -19,6 +20,7 @@ import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/in
 import { Route as BusinessCodeGoalsRouteImport } from './routes/$businessCode/goals'
 import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as BusinessCodeChannelsInstagramRouteImport } from './routes/$businessCode/channels/instagram'
 import { Route as BusinessCodeAgentsAgentTypeRouteImport } from './routes/$businessCode/agents/$agentType'
 
 const LoginRoute = LoginRouteImport.update({
@@ -34,6 +36,11 @@ const IndexRoute = IndexRouteImport.update({
 const PayOrderIdRoute = PayOrderIdRouteImport.update({
   id: '/pay/$orderId',
   path: '/pay/$orderId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessCodeWhatsappRoute = BusinessCodeWhatsappRouteImport.update({
+  id: '/$businessCode/whatsapp',
+  path: '/$businessCode/whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BusinessCodeSettingsRoute = BusinessCodeSettingsRouteImport.update({
@@ -71,6 +78,12 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BusinessCodeChannelsInstagramRoute =
+  BusinessCodeChannelsInstagramRouteImport.update({
+    id: '/$businessCode/channels/instagram',
+    path: '/$businessCode/channels/instagram',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const BusinessCodeAgentsAgentTypeRoute =
   BusinessCodeAgentsAgentTypeRouteImport.update({
     id: '/$businessCode/agents/$agentType',
@@ -87,8 +100,10 @@ export interface FileRoutesByFullPath {
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
   '/$businessCode/settings': typeof BusinessCodeSettingsRoute
+  '/$businessCode/whatsapp': typeof BusinessCodeWhatsappRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
+  '/$businessCode/channels/instagram': typeof BusinessCodeChannelsInstagramRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
@@ -100,8 +115,10 @@ export interface FileRoutesByTo {
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
   '/$businessCode/settings': typeof BusinessCodeSettingsRoute
+  '/$businessCode/whatsapp': typeof BusinessCodeWhatsappRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
+  '/$businessCode/channels/instagram': typeof BusinessCodeChannelsInstagramRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
@@ -114,8 +131,10 @@ export interface FileRoutesById {
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
   '/$businessCode/settings': typeof BusinessCodeSettingsRoute
+  '/$businessCode/whatsapp': typeof BusinessCodeWhatsappRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
+  '/$businessCode/channels/instagram': typeof BusinessCodeChannelsInstagramRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
@@ -129,8 +148,10 @@ export interface FileRouteTypes {
     | '/$businessCode/products'
     | '/$businessCode/sales'
     | '/$businessCode/settings'
+    | '/$businessCode/whatsapp'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
+    | '/$businessCode/channels/instagram'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -142,8 +163,10 @@ export interface FileRouteTypes {
     | '/$businessCode/products'
     | '/$businessCode/sales'
     | '/$businessCode/settings'
+    | '/$businessCode/whatsapp'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
+    | '/$businessCode/channels/instagram'
     | '/api/auth/$'
   id:
     | '__root__'
@@ -155,8 +178,10 @@ export interface FileRouteTypes {
     | '/$businessCode/products'
     | '/$businessCode/sales'
     | '/$businessCode/settings'
+    | '/$businessCode/whatsapp'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
+    | '/$businessCode/channels/instagram'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
@@ -169,8 +194,10 @@ export interface RootRouteChildren {
   BusinessCodeProductsRoute: typeof BusinessCodeProductsRoute
   BusinessCodeSalesRoute: typeof BusinessCodeSalesRoute
   BusinessCodeSettingsRoute: typeof BusinessCodeSettingsRoute
+  BusinessCodeWhatsappRoute: typeof BusinessCodeWhatsappRoute
   PayOrderIdRoute: typeof PayOrderIdRoute
   BusinessCodeAgentsAgentTypeRoute: typeof BusinessCodeAgentsAgentTypeRoute
+  BusinessCodeChannelsInstagramRoute: typeof BusinessCodeChannelsInstagramRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -195,6 +222,13 @@ declare module '@tanstack/react-router' {
       path: '/pay/$orderId'
       fullPath: '/pay/$orderId'
       preLoaderRoute: typeof PayOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$businessCode/whatsapp': {
+      id: '/$businessCode/whatsapp'
+      path: '/$businessCode/whatsapp'
+      fullPath: '/$businessCode/whatsapp'
+      preLoaderRoute: typeof BusinessCodeWhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$businessCode/settings': {
@@ -246,6 +280,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/channels/instagram': {
+      id: '/$businessCode/channels/instagram'
+      path: '/$businessCode/channels/instagram'
+      fullPath: '/$businessCode/channels/instagram'
+      preLoaderRoute: typeof BusinessCodeChannelsInstagramRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$businessCode/agents/$agentType': {
       id: '/$businessCode/agents/$agentType'
       path: '/$businessCode/agents/$agentType'
@@ -265,8 +306,10 @@ const rootRouteChildren: RootRouteChildren = {
   BusinessCodeProductsRoute: BusinessCodeProductsRoute,
   BusinessCodeSalesRoute: BusinessCodeSalesRoute,
   BusinessCodeSettingsRoute: BusinessCodeSettingsRoute,
+  BusinessCodeWhatsappRoute: BusinessCodeWhatsappRoute,
   PayOrderIdRoute: PayOrderIdRoute,
   BusinessCodeAgentsAgentTypeRoute: BusinessCodeAgentsAgentTypeRoute,
+  BusinessCodeChannelsInstagramRoute: BusinessCodeChannelsInstagramRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
