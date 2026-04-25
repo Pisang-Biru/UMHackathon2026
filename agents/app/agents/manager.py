@@ -17,6 +17,13 @@ from app.agents.manager_terminal import make_finalize_node, make_queue_for_human
 
 _log = logging.getLogger(__name__)
 
+AGENT_META = {
+    "id": "manager",
+    "name": "Manager",
+    "role": "Reviews and refines sales replies",
+    "icon": "brain",
+}
+
 
 # NOTE: ManagerState is total=False so node return dicts don't need to
 # repeat every key. Callers MUST still seed `business_id`, `messages`, and

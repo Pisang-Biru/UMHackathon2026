@@ -29,6 +29,13 @@ from app.memory.formatter import format_search_results
 from typing import Literal as _Lit
 from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
 
+AGENT_META = {
+    "id": "customer_support",
+    "name": "Sales Assistant",
+    "role": "Handles customer chat end-to-end",
+    "icon": "messages-square",
+}
+
 
 class SupportAgentState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]

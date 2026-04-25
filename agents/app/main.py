@@ -33,6 +33,19 @@ else:
     active_graph = support_graph
 
 app = FastAPI(title="LangGraph Agents API", version="0.1.0")
+
+from app.agents.registry import upsert_registry
+
+
+@app.on_event("startup")
+def _boot_registry() -> None:
+    try:
+        upsert_registry()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("registry upsert failed")
+
+
 app.include_router(make_agent_router(chat_graph))
 app.include_router(make_support_router(active_graph))
 app.include_router(memory_router)
