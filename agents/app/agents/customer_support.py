@@ -243,6 +243,33 @@ async def _load_memory_node(state: SupportAgentState) -> dict:
     return {"memory_block": block}
 
 
+def _phone_key(phone: str | None) -> str:
+    """Lowercase, digits-only key. Used both at receipt emission and gate lookup
+    so 'none:<phone_key>' ids round-trip across formatting differences."""
+    return re.sub(r"\D", "", (phone or "").lower())
+
+
+def _short_id(full: str, n: int = 8) -> str:
+    """Stable short id derived from a full pk. Used by formatter and tools to
+    produce the citable short id LLM sees and gates verify."""
+    return hashlib.sha1(full.encode("utf-8")).hexdigest()[:n]
+
+
+def _query_hash8(query: str) -> str:
+    """8-char sha1 prefix of a query string; used as anchor for empty-result receipts."""
+    return hashlib.sha1((query or "").encode("utf-8")).hexdigest()[:8]
+
+
+def _safe_tool_return(text: str, receipts: list) -> tuple[str, list]:
+    """Success path. Receipts MUST reflect data the tool actually saw."""
+    return (text, receipts)
+
+
+def _error_tool_return(err: str) -> tuple[str, list]:
+    """Error path. NO receipts — Gate 5 will treat any downstream claim as ungrounded."""
+    return (f"ERROR: {err}", [])
+
+
 def _make_order_lookup_tool(business_id: str, customer_phone: str):
     @tool(response_format="content_and_artifact")
     def check_order_status() -> tuple[str, list]:
@@ -322,32 +349,6 @@ def _make_search_memory_tool(business_id: str):
 
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
-def _phone_key(phone: str | None) -> str:
-    """Lowercase, digits-only key. Used both at receipt emission and gate lookup
-    so 'none:<phone_key>' ids round-trip across formatting differences."""
-    return re.sub(r"\D", "", (phone or "").lower())
-
-
-def _short_id(full: str, n: int = 8) -> str:
-    """Stable short id derived from a full pk. Used by formatter and tools to
-    produce the citable short id LLM sees and gates verify."""
-    return hashlib.sha1(full.encode("utf-8")).hexdigest()[:n]
-
-
-def _query_hash8(query: str) -> str:
-    return hashlib.sha1((query or "").encode("utf-8")).hexdigest()[:8]
-
-
-def _safe_tool_return(text: str, receipts: list) -> tuple[str, list]:
-    """Success path. Receipts MUST reflect data the tool actually saw."""
-    return (text, receipts)
-
-
-def _error_tool_return(err: str) -> tuple[str, list]:
-    """Error path. NO receipts — Gate 5 will treat any downstream claim as ungrounded."""
-    return (f"ERROR: {err}", [])
 
 
 def _new_tool_messages(history: list[BaseMessage], orig_count: int) -> list[BaseMessage]:
