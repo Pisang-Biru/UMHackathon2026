@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
@@ -7,7 +8,45 @@ from langchain_core.messages import HumanMessage
 from app.db import SessionLocal, AgentAction, AgentActionStatus
 from app.memory.phone import normalize_phone
 from app.agents.finance.agent import is_finance_intent
+from app.agents.manager import _load_business_context_cached
 from typing import Optional
+
+
+# Greeting / identity-confirmation shortcut.
+#
+# Buyer messages that match these patterns get a templated reply built from the
+# cached business name — no LLM call. Saves ~15-20s per turn on conversational
+# openers ("hi", "ini kedai X ke?", "salam"). Anything that fails to match
+# falls through to the full agent graph unchanged.
+_GREETING_RE = re.compile(
+    r"^\s*("
+    r"hi|hii+|hello|helo+|hai|hey|yo|"
+    r"salam|salams|assalam(?:u'?alaikum|ualaikum)?|"
+    r"good\s+(?:morning|afternoon|evening|day)|"
+    r"selamat\s+(?:pagi|tengahari|petang|malam)|"
+    r"morning|afternoon|evening"
+    r")\s*[!.?,]*\s*$",
+    re.IGNORECASE,
+)
+_IDENTITY_RE = re.compile(
+    r"^\s*(?:hi|hai|hello|helo|salam|hey)?\s*,?\s*"
+    r"(?:ini|is\s+this|are\s+you|this\s+is)\s+.{1,40}?\s*(?:ke|kah|right)?\s*\?+\s*$",
+    re.IGNORECASE,
+)
+
+
+def _try_greeting_shortcut(business_id: str, message: str) -> Optional[str]:
+    """Return templated reply if message matches greeting/identity intent, else None."""
+    if len(message) > 80:
+        return None
+    if not (_GREETING_RE.match(message) or _IDENTITY_RE.match(message)):
+        return None
+    try:
+        _ctx, _ids, business_name = _load_business_context_cached(business_id)
+    except Exception:
+        return None
+    name = business_name.rstrip(" .!?")
+    return f"Ya, betul! Ini {name}. Ada apa-apa yang boleh kami bantu?"
 
 
 router = APIRouter(prefix="/agent", tags=["support"])
@@ -109,6 +148,14 @@ def make_support_router(support_graph):
     @router.post("/support/chat", response_model=SupportChatResponse)
     async def support_chat(req: SupportChatRequest):
         try:
+            shortcut_reply = _try_greeting_shortcut(req.business_id, req.message)
+            if shortcut_reply is not None:
+                return SupportChatResponse(
+                    status="auto_send",
+                    reply=shortcut_reply,
+                    confidence=1.0,
+                )
+
             if is_finance_intent(req.message):
                 from app.routers.finance import _finance_graph
                 state = {

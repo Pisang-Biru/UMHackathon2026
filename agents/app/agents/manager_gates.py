@@ -76,6 +76,14 @@ def run_gates(
     # the model may self-format the empty-receipt id with phone digits,
     # masked digits, or any deterministic suffix; the negative is grounded
     # by the (business, buyer, kind) tuple being verifiably empty.
+    #
+    # For non-factual buyer messages (greetings, identity confirmations) we
+    # strip invented ids in place rather than triggering a costly rewrite —
+    # the reply text doesn't depend on a citation in those cases.
+    buyer_msg_for_gate = _last_human_text(messages)
+    is_factual_q_for_gate = bool(FACTUAL_Q_RE.search(buyer_msg_for_gate))
+
+    ungrounded: list = []
     for fact in draft.facts_used:
         key = f"{fact.kind}:{fact.id}"
         if key in valid_fact_ids:
@@ -85,13 +93,25 @@ def run_gates(
             and f"{fact.kind}:none:*" in valid_fact_ids
         ):
             continue
-        return GateResult(
-            verdict="rewrite",
-            gate_num=2,
-            reason_slug=f"ungrounded_fact:{fact.kind}:{fact.id}",
-            passed_gates=passed,
-        )
-    passed.append("hallucinated_fact")
+        ungrounded.append(fact)
+
+    if ungrounded:
+        if is_factual_q_for_gate:
+            fact = ungrounded[0]
+            return GateResult(
+                verdict="rewrite",
+                gate_num=2,
+                reason_slug=f"ungrounded_fact:{fact.kind}:{fact.id}",
+                passed_gates=passed,
+            )
+        ungrounded_keys = {f"{f.kind}:{f.id}" for f in ungrounded}
+        draft.facts_used = [
+            f for f in draft.facts_used
+            if f"{f.kind}:{f.id}" not in ungrounded_keys
+        ]
+        passed.append("hallucinated_fact_stripped_non_factual")
+    else:
+        passed.append("hallucinated_fact")
 
     # Gate 3 / 4 — unaddressed questions
     if draft.unaddressed_questions:
@@ -148,5 +168,11 @@ def run_gates(
                 passed_gates=passed,
             )
     passed.append("factual_q_grounded")
+
+    # Fast-path: non-factual buyer message + draft has no unresolved questions
+    # is auto-pass. Skips the ~20s LLM evaluator call for greetings, identity
+    # confirmations, thanks, etc. Factual messages still get LLM judgment.
+    if not is_factual_q_for_gate and not draft.unaddressed_questions:
+        return GateResult(verdict="pass", reason_slug="non_factual_clean_draft", passed_gates=passed)
 
     return GateResult(verdict=None, passed_gates=passed)
