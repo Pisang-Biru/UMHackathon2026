@@ -212,6 +212,58 @@ Apply in this order:
 
 Rolling these into one PR (two ordered commits) keeps the window where the DB is "moved but env.py not flipped" to seconds. CI runs `alembic upgrade head` once per PR — it must complete before tests.
 
+## Rollout to teammates with existing DBs
+
+Teammates already have their dev DB seeded in the old layout (everything in `public`). They must NOT `prisma db push` or wipe the DB to "get clean" — that re-creates the original incident. Instead, the alembic data migration is designed so a `git pull` + `alembic upgrade head` is enough to converge.
+
+### Per-developer steps (post-merge)
+
+```bash
+git pull
+docker compose pull         # if image changed
+docker compose up -d postgres rabbitmq redis
+docker compose run --rm agents-init  # runs prisma migrate deploy + alembic upgrade head + seed (idempotent)
+docker compose restart agents-api agents-worker agents-beat
+```
+
+`agents-init` already chains `prisma migrate deploy` then `alembic upgrade head`. Migration `0005_isolate_agents_schema.py` (a) creates the `agents` schema and (b) moves the 9 tables. `ALTER TABLE ... SET SCHEMA` is data-preserving — every teammate keeps their existing memory turns, embeddings, and event history.
+
+### Why the order is safe for them
+
+The same Deployment-order risk above applies to teammates, but it is contained inside the single `agents-init` invocation:
+
+1. `prisma migrate deploy` — no-op if Prisma history is current; otherwise applies new Prisma migrations against `public` only (after the schema-allowlist change lands, Prisma cannot touch `agents.*`).
+2. `alembic upgrade head` — runs 0005 against the still-`public.alembic_version` row, then alembic immediately commits and exits.
+3. The next alembic invocation reads from the new `agents.alembic_version` location because env.py (in the same commit) sets `version_table_schema="agents"`.
+
+Because steps 2 and 3 are separate process invocations, the env.py flag is already in place by the time anyone reads the version table again. No transient broken window for end users.
+
+### Sanity check after pull
+
+Each teammate runs:
+
+```bash
+docker compose exec postgres psql -U postgres -d pisangbisnes -c "\dt agents.*"
+docker compose exec postgres psql -U postgres -d pisangbisnes -c "\dt public.*"
+```
+
+Expected: 9 tables under `agents.*`, Prisma-owned tables under `public.*`. Memory turn count, agent_events count, etc. should match pre-pull values (run `SELECT count(*)` before and after pulling to confirm `SET SCHEMA` preserved data).
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `alembic upgrade` errors `relation "alembic_version" does not exist` | Teammate ran a step out of order; env.py flipped to `agents` schema before 0005 ran. | `psql ... -c "ALTER TABLE public.alembic_version SET SCHEMA agents;"` then re-run `alembic upgrade head`. |
+| Prisma reports drift after pull | Old Prisma client in `node_modules`. | `pnpm install && npx prisma generate`. |
+| `agents-init` re-seeds and clobbers their dev data | Seed script is idempotent (uses `dev-biz` fixed id) but inserts demo rows. | Pass `SEED=false` to `agents-init`, or skip the init container entirely and run `alembic upgrade head` inside `agents-api` directly: `docker compose exec agents-api alembic upgrade head`. |
+| `agents.agents` table empty after upgrade | Alembic `SET SCHEMA` moves the table but `upsert_registry()` only runs on `agents-api` startup. | `docker compose restart agents-api`, or run `docker compose exec agents-api python -c "from app.agents.registry import upsert_registry; upsert_registry()"`. |
+
+### Communication
+
+Post in the team channel before merging:
+
+> Merging schema-isolation PR. After pulling: `docker compose run --rm agents-init && docker compose restart agents-api`. Your dev data is preserved (no reseed needed). If you see drift errors, do NOT run `prisma db push` — ping me. Spec: `docs/superpowers/specs/2026-04-25-schema-isolation-and-db-safety-design.md`.
+
 ## Validation
 
 1. Apply alembic migration on dev DB. Confirm `\dt agents.*` in psql lists all 9 tables, `\dt public.*` lists only Prisma tables.
