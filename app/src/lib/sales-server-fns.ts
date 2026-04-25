@@ -66,6 +66,8 @@ export const fetchSales = createServerFn({ method: 'GET' })
       totalAmount: r.totalAmount.toNumber(),
       buyerName: r.buyerName,
       buyerContact: r.buyerContact,
+      realMargin: r.realMargin ? r.realMargin.toNumber() : null,
+      marginStatus: r.marginStatus ?? null,
     }))
 
     return {

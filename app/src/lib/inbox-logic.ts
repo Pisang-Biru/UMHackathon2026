@@ -1,5 +1,5 @@
 export type AgentActionStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO_SENT'
-export type InboxTab = 'mine' | 'recent' | 'unread'
+export type InboxTab = 'mine' | 'recent' | 'unread' | 'finance'
 export type OrderItemStatus = 'PENDING_PAYMENT' | 'PAID' | 'CANCELLED'
 
 export interface InboxAction {
@@ -72,6 +72,8 @@ export function matchesTab(action: InboxAction, tab: InboxTab, now: Date = new D
       )
     case 'unread':
       return action.viewedAt === null && action.status !== 'AUTO_SENT'
+    case 'finance':
+      return false
   }
 }
 
@@ -86,6 +88,8 @@ function matchesOrderTab(order: InboxOrder, tab: InboxTab, now: Date): boolean {
       )
     case 'unread':
       return order.status === 'PAID' && order.acknowledgedAt === null
+    case 'finance':
+      return false
   }
 }
 

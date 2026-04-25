@@ -11,6 +11,8 @@ export type SalesOrder = {
   totalAmount: number
   buyerName: string | null
   buyerContact: string | null
+  realMargin: number | null
+  marginStatus: 'OK' | 'LOSS' | 'MISSING_DATA' | null
 }
 
 export type SalesKpis = {

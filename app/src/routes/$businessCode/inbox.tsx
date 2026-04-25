@@ -8,6 +8,7 @@ import {
   approveAction,
   rejectAction,
 } from '#/lib/inbox-server-fns'
+import { listFinanceAlerts, resolveFinanceAlert } from '#/lib/finance-server-fns'
 import { acknowledgeOrder } from '#/lib/order-server-fns'
 import { fetchSidebarAgents } from '#/lib/sidebar-server-fns'
 import { BusinessStrip } from '#/components/business-strip'
@@ -79,6 +80,7 @@ function InboxPage() {
   const [items, setItems] = React.useState<InboxItem[]>(initialItems.map(normalizeItem))
   const [counts, setCounts] = React.useState(initialCounts)
   const [selected, setSelected] = React.useState<Selection>(null)
+  const [alerts, setAlerts] = React.useState<Awaited<ReturnType<typeof listFinanceAlerts>>>([])
 
   const selectedItem = selected
     ? items.find((it) =>
@@ -91,11 +93,25 @@ function InboxPage() {
   const orders = items.filter((it): it is Extract<InboxItem, { kind: 'order' }> => it.kind === 'order').map((it) => it.order)
   const agentGroups = groupByAgent(actions)
 
+  async function loadFinanceAlerts() {
+    const rows = await listFinanceAlerts({ data: { businessId: current.id } })
+    setAlerts(rows)
+  }
+
   async function switchTab(nextTab: InboxTab) {
     setTab(nextTab)
     setSelected(null)
+    if (nextTab === 'finance') {
+      await loadFinanceAlerts()
+      return
+    }
     const next = await fetchInbox({ data: { businessId: current.id, tab: nextTab } })
     setItems(next.map(normalizeItem))
+  }
+
+  async function handleResolveAlert(alertId: string) {
+    await resolveFinanceAlert({ data: { alertId } })
+    await loadFinanceAlerts()
   }
 
   async function refreshCounts() {
@@ -171,7 +187,30 @@ function InboxPage() {
         <InboxTabs active={tab} counts={counts} onChange={switchTab} />
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-auto">
-            {items.length === 0 ? (
+            {tab === 'finance' ? (
+              <ul className="px-4 py-4">
+                {alerts.map(a => (
+                  <li key={a.id} className="flex items-center justify-between border-b py-2" style={{ borderColor: '#1a1a1e' }}>
+                    <div>
+                      <div className="text-sm font-medium" style={{ color: '#e8e6e2' }}>{a.message}</div>
+                      <div className="text-xs opacity-70" style={{ color: '#888' }}>{new Date(a.createdAt).toLocaleString()}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleResolveAlert(a.id)}
+                        className="px-2 py-1 rounded text-xs border"
+                        style={{ borderColor: '#1e1e24', color: '#888' }}
+                      >
+                        resolve
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                {alerts.length === 0 && (
+                  <li className="text-xs opacity-60 py-4" style={{ color: '#555' }}>No unresolved alerts.</li>
+                )}
+              </ul>
+            ) : items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16" style={{ color: '#444' }}>
                 <p className="text-[13px]" style={{ fontFamily: 'var(--font-mono)' }}>No items</p>
                 <p className="text-[11px] mt-1" style={{ color: '#333' }}>Nothing needs your attention right now</p>
@@ -205,14 +244,16 @@ function InboxPage() {
               </>
             )}
           </div>
-          {selectedItem?.kind === 'order' ? (
-            <OrderDetailPanel order={selectedItem.order} />
-          ) : (
-            <ActionDetailPanel
-              action={selectedItem?.kind === 'action' ? selectedItem.action : null}
-              onApprove={handleApprove}
-              onReject={handleReject}
-            />
+          {tab !== 'finance' && (
+            selectedItem?.kind === 'order' ? (
+              <OrderDetailPanel order={selectedItem.order} />
+            ) : (
+              <ActionDetailPanel
+                action={selectedItem?.kind === 'action' ? selectedItem.action : null}
+                onApprove={handleApprove}
+                onReject={handleReject}
+              />
+            )
           )}
         </div>
       </main>

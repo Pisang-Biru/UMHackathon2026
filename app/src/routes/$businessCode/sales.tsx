@@ -41,6 +41,7 @@ function SalesPage() {
   const [data, setData] = React.useState(initialSales)
   const [loading, setLoading] = React.useState(false)
   const [search, setSearch] = React.useState('')
+  const [lossOnly, setLossOnly] = React.useState(false)
 
   async function handleRangeChange(next: SalesRange) {
     if (next === range || loading) return
@@ -54,7 +55,11 @@ function SalesPage() {
     }
   }
 
-  const displayedRows = useDisplayedSales(data.orders, search, 'createdAt', 'desc')
+  const visibleOrders = lossOnly
+    ? data.orders.filter(o => o.marginStatus === 'LOSS')
+    : data.orders
+
+  const displayedRows = useDisplayedSales(visibleOrders, search, 'createdAt', 'desc')
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#0a0a0c' }}>
@@ -73,6 +78,14 @@ function SalesPage() {
               </h1>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setLossOnly(v => !v)}
+                className={lossOnly
+                  ? 'px-2 py-1 rounded bg-red-100 text-red-700 text-xs'
+                  : 'px-2 py-1 rounded border border-zinc-700 text-xs text-zinc-400'}
+              >
+                Loss only
+              </button>
               <RangeTabs value={range} onChange={handleRangeChange} disabled={loading} />
               <ExportCsvButton rows={displayedRows} businessCode={current.code} />
             </div>
@@ -83,7 +96,7 @@ function SalesPage() {
           <KpiCards kpis={data.kpis} />
           <SalesCharts series={data.series} topProducts={data.topProducts} />
           <SalesTable
-            orders={data.orders}
+            orders={visibleOrders}
             search={search}
             onSearchChange={setSearch}
           />

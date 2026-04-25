@@ -1,6 +1,7 @@
 import React from 'react'
 import { ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react'
 import type { SalesOrder } from '#/lib/sales-logic'
+import { MarginBadge } from '#/components/MarginBadge'
 
 type SortDir = 'asc' | 'desc' | null
 type SortKey = 'createdAt' | 'productName' | 'qty' | 'unitPrice' | 'totalAmount' | 'buyerName' | 'paidAt'
@@ -134,6 +135,7 @@ export function SalesTable({
               <SortHeader label="Qty" active={sortKey === 'qty'} dir={sortDir} onClick={() => toggle('qty')} align="right" />
               <SortHeader label="Unit" active={sortKey === 'unitPrice'} dir={sortDir} onClick={() => toggle('unitPrice')} align="right" />
               <SortHeader label="Total" active={sortKey === 'totalAmount'} dir={sortDir} onClick={() => toggle('totalAmount')} align="right" />
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#666', fontFamily: 'var(--font-mono)' }}>Real Margin</th>
               <SortHeader label="Buyer" active={sortKey === 'buyerName'} dir={sortDir} onClick={() => toggle('buyerName')} />
               <SortHeader label="Paid At" active={sortKey === 'paidAt'} dir={sortDir} onClick={() => toggle('paidAt')} />
             </tr>
@@ -141,7 +143,7 @@ export function SalesTable({
           <tbody>
             {displayed.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-[12px]" style={{ color: '#555' }}>
+                <td colSpan={9} className="px-3 py-8 text-center text-[12px]" style={{ color: '#555' }}>
                   {orders.length === 0 ? 'No paid sales yet.' : 'No matches.'}
                 </td>
               </tr>
@@ -153,6 +155,12 @@ export function SalesTable({
                 <td className="px-3 py-2 text-right tabular-nums">{o.qty}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatRM(o.unitPrice)}</td>
                 <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatRM(o.totalAmount)}</td>
+                <td className="px-3 py-2 text-right">
+                  <MarginBadge
+                    status={o.marginStatus}
+                    value={o.realMargin != null ? o.realMargin.toFixed(2) : null}
+                  />
+                </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-col">
                     <span>{o.buyerName ?? '—'}</span>
