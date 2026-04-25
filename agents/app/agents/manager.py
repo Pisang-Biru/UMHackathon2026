@@ -14,6 +14,8 @@ from app.agents.customer_support import build_customer_support_agent
 from app.agents.manager_evaluator import make_evaluate_node
 from app.agents.manager_rewrite import make_manager_rewrite_node, gates_only_check
 from app.agents.manager_terminal import make_finalize_node, make_queue_for_human_node
+from app.agents._traced import traced
+from app.events import emit
 
 _log = logging.getLogger(__name__)
 
@@ -127,7 +129,27 @@ def build_manager_graph(*, jual_llm, manager_llm):
             "reasoning": "",
             "revision_mode": "draft",
         }
+        try:
+            emit(
+                agent_id="manager",
+                kind="handoff",
+                business_id=state.get("business_id"),
+                conversation_id=state.get("customer_id"),
+                summary="manager → customer_support (draft request)",
+            )
+        except Exception:
+            pass
         result = await jual_graph.ainvoke(sub_state)
+        try:
+            emit(
+                agent_id="customer_support",
+                kind="handoff",
+                business_id=state.get("business_id"),
+                conversation_id=state.get("customer_id"),
+                summary="customer_support → manager (draft returned)",
+            )
+        except Exception:
+            pass
         draft = result.get("structured_reply") or StructuredReply(
             reply=result.get("draft_reply", ""),
             confidence=result.get("confidence", 0.0),
@@ -160,7 +182,27 @@ def build_manager_graph(*, jual_llm, manager_llm):
             "previous_draft": state["jual_draft"],
             "critique": state["critique"],
         }
+        try:
+            emit(
+                agent_id="manager",
+                kind="handoff",
+                business_id=state.get("business_id"),
+                conversation_id=state.get("customer_id"),
+                summary="manager → customer_support (draft request)",
+            )
+        except Exception:
+            pass
         result = await jual_graph.ainvoke(sub_state)
+        try:
+            emit(
+                agent_id="customer_support",
+                kind="handoff",
+                business_id=state.get("business_id"),
+                conversation_id=state.get("customer_id"),
+                summary="customer_support → manager (draft returned)",
+            )
+        except Exception:
+            pass
         draft = result.get("structured_reply") or StructuredReply(
             reply=result.get("draft_reply", ""),
             confidence=result.get("confidence", 0.0),
@@ -201,15 +243,50 @@ def build_manager_graph(*, jual_llm, manager_llm):
     def route_gates_only(state: ManagerState) -> Literal["finalize", "queue_for_human"]:
         return "finalize" if state.get("final_action_hint") == "auto_send" else "queue_for_human"
 
+    async def _finalize_with_emit(state):
+        out = await finalize(state)
+        try:
+            emit(
+                agent_id="manager",
+                kind="handoff",
+                business_id=state.get("business_id"),
+                conversation_id=state.get("customer_id"),
+                task_id=(out or {}).get("action_id") or state.get("action_id"),
+                status="ok",
+                summary="auto-sent reply",
+            )
+        except Exception:
+            pass
+        return out
+
+    async def _queue_with_emit(state):
+        out = await queue_for_human(state)
+        try:
+            emit(
+                agent_id="manager",
+                kind="handoff",
+                business_id=state.get("business_id"),
+                conversation_id=state.get("customer_id"),
+                task_id=(out or {}).get("action_id") or state.get("action_id"),
+                status="escalate",
+                summary="escalated to human inbox",
+                reasoning=(out or {}).get("escalation_summary") or state.get("escalation_summary"),
+            )
+        except Exception:
+            pass
+        return out
+
+    _t = lambda n: lambda fn: traced(agent_id="manager", node=n)(fn)
+
     graph = StateGraph(ManagerState)
-    graph.add_node("load_shared_context", load_shared_context)
-    graph.add_node("dispatch_jual", dispatch_jual)
-    graph.add_node("dispatch_jual_revise", dispatch_jual_revise)
-    graph.add_node("evaluate", evaluate)
-    graph.add_node("manager_rewrite", manager_rewrite)
-    graph.add_node("gates_only_check", gates_only_check)
-    graph.add_node("finalize", finalize)
-    graph.add_node("queue_for_human", queue_for_human)
+    graph.add_node("load_shared_context", _t("load_shared_context")(load_shared_context))
+    graph.add_node("dispatch_jual", _t("dispatch_jual")(dispatch_jual))
+    graph.add_node("dispatch_jual_revise", _t("dispatch_jual_revise")(dispatch_jual_revise))
+    graph.add_node("evaluate", _t("evaluate")(evaluate))
+    graph.add_node("manager_rewrite", _t("manager_rewrite")(manager_rewrite))
+    graph.add_node("gates_only_check", _t("gates_only_check")(gates_only_check))
+    graph.add_node("finalize", _t("finalize")(_finalize_with_emit))
+    graph.add_node("queue_for_human", _t("queue_for_human")(_queue_with_emit))
 
     graph.add_edge(START, "load_shared_context")
     graph.add_edge("load_shared_context", "dispatch_jual")
