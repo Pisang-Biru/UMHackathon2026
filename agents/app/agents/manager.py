@@ -38,6 +38,8 @@ class ManagerState(TypedDict, total=False):
     business_context: str
     memory_block: str
     valid_fact_ids: set[str]
+    preloaded_fact_ids: set[str]      # snapshot of pre-tool-call ids; never mutated after load
+    last_harvested_msg_index: int     # cursor for harvest_receipts; init 0
     jual_draft: StructuredReply | None
     verdict: Literal["pass", "revise", "rewrite", "escalate"] | None
     critique: ManagerCritique | None
@@ -100,6 +102,8 @@ def _load_shared_context_impl(state: dict) -> dict:
         "business_context": business_context,
         "memory_block": memory_block,
         "valid_fact_ids": valid_ids,
+        "preloaded_fact_ids": set(valid_ids),  # frozen snapshot for Gate 5 "had retrieval?" check
+        "last_harvested_msg_index": 0,
     }
 
 
