@@ -11,6 +11,15 @@ import {
   confidenceDistribution,
   dailySuccessRate,
 } from '#/lib/agent-stats'
+import {
+  computeRunTotals,
+  computeRunCost,
+  dailyRunActivity,
+  dailyRunStatusBreakdown,
+  averageDurationMs,
+  type RunRow,
+  type RunStatus,
+} from '#/lib/agent-run-stats'
 
 async function requireSession() {
   const { getRequest } = await import('@tanstack/react-start/server')
@@ -156,5 +165,57 @@ export const fetchAgentBudget = createServerFn({ method: 'GET' })
     return {
       totals: { inputTokens, outputTokens, cachedTokens, totalCostUsd },
       rows: rows.map((r) => ({ ...r, costUsd: r.costUsd == null ? null : r.costUsd.toNumber() })),
+    }
+  })
+
+function serializeRun(r: any): RunRow {
+  return {
+    id: r.id,
+    agentType: r.agentType,
+    kind: r.kind,
+    summary: r.summary,
+    status: r.status as RunStatus,
+    durationMs: r.durationMs,
+    inputTokens: r.inputTokens,
+    outputTokens: r.outputTokens,
+    cachedTokens: r.cachedTokens,
+    costUsd: r.costUsd == null ? null : r.costUsd.toNumber(),
+    refTable: r.refTable,
+    refId: r.refId,
+    createdAt: r.createdAt,
+  }
+}
+
+export const fetchAgentDashboard = createServerFn({ method: 'GET' })
+  .inputValidator((data: unknown) => {
+    const { businessId, agentType, raw } = validateCommon(data)
+    const rangeDays = typeof raw.rangeDays === 'number' ? raw.rangeDays : 14
+    return { businessId, agentType, rangeDays }
+  })
+  .handler(async ({ data }) => {
+    const session = await requireSession()
+    await requireBusinessOwner(data.businessId, session.user.id)
+
+    const since = new Date(Date.now() - data.rangeDays * 24 * 60 * 60 * 1000)
+    const [rows, latest] = await Promise.all([
+      prisma.agentRun.findMany({
+        where: { businessId: data.businessId, agentType: data.agentType, createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.agentRun.findFirst({
+        where: { businessId: data.businessId, agentType: data.agentType },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
+
+    const runs = rows.map(serializeRun)
+    return {
+      totals: computeRunTotals(runs),
+      cost: computeRunCost(runs),
+      activity: dailyRunActivity(runs, data.rangeDays),
+      statusBreakdown: dailyRunStatusBreakdown(runs, data.rangeDays),
+      avgDurationMs: averageDurationMs(runs),
+      recent: runs.slice(0, 10),
+      latestRun: latest ? serializeRun(latest) : null,
     }
   })
