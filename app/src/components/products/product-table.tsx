@@ -7,6 +7,8 @@ export interface Product {
   price: number
   stock: number
   description: string | null
+  cogs: number | null
+  packagingCost: number | null
 }
 
 interface ProductTableProps {

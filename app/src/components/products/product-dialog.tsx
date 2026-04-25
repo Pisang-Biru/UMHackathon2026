@@ -9,6 +9,8 @@ export interface ProductFormData {
   price: number
   stock: number
   description: string
+  cogs: number | null
+  packagingCost: number | null
 }
 
 interface ProductDialogProps {
@@ -23,6 +25,8 @@ export function ProductDialog({ open, onOpenChange, initial, onSubmit }: Product
   const [price, setPrice] = React.useState(initial?.price?.toString() ?? '')
   const [stock, setStock] = React.useState(initial?.stock?.toString() ?? '0')
   const [description, setDescription] = React.useState(initial?.description ?? '')
+  const [cogs, setCogs] = React.useState(initial?.cogs != null ? initial.cogs.toString() : '')
+  const [packagingCost, setPackagingCost] = React.useState(initial?.packagingCost != null ? initial.packagingCost.toString() : '')
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -32,6 +36,8 @@ export function ProductDialog({ open, onOpenChange, initial, onSubmit }: Product
       setPrice(initial?.price?.toString() ?? '')
       setStock(initial?.stock?.toString() ?? '0')
       setDescription(initial?.description ?? '')
+      setCogs(initial?.cogs != null ? initial.cogs.toString() : '')
+      setPackagingCost(initial?.packagingCost != null ? initial.packagingCost.toString() : '')
       setError(null)
     }
   }, [open, initial])
@@ -40,13 +46,17 @@ export function ProductDialog({ open, onOpenChange, initial, onSubmit }: Product
     e.preventDefault()
     const parsedPrice = parseFloat(price)
     const parsedStock = parseInt(stock, 10)
+    const parsedCogs = cogs.trim() === '' ? null : parseFloat(cogs)
+    const parsedPackagingCost = packagingCost.trim() === '' ? null : parseFloat(packagingCost)
     if (!name.trim()) return setError('Name is required')
     if (isNaN(parsedPrice) || parsedPrice < 0) return setError('Price must be a valid number')
     if (isNaN(parsedStock) || parsedStock < 0) return setError('Stock must be a valid number')
+    if (parsedCogs !== null && (isNaN(parsedCogs) || parsedCogs < 0)) return setError('COGS must be a valid non-negative number')
+    if (parsedPackagingCost !== null && (isNaN(parsedPackagingCost) || parsedPackagingCost < 0)) return setError('Packaging cost must be a valid non-negative number')
     setLoading(true)
     setError(null)
     try {
-      await onSubmit({ name: name.trim(), price: parsedPrice, stock: parsedStock, description })
+      await onSubmit({ name: name.trim(), price: parsedPrice, stock: parsedStock, description, cogs: parsedCogs, packagingCost: parsedPackagingCost })
       onOpenChange(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -114,6 +124,32 @@ export function ProductDialog({ open, onOpenChange, initial, onSubmit }: Product
               rows={3}
               style={{ background: '#16161a', borderColor: '#2a2a32', color: '#e8e6e2', resize: 'none' }}
             />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              {label('COGS (RM)')}
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={cogs}
+                onChange={(e) => setCogs(e.target.value)}
+                placeholder="optional"
+                style={{ background: '#16161a', borderColor: '#2a2a32', color: '#e8e6e2' }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {label('Packaging (RM)')}
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={packagingCost}
+                onChange={(e) => setPackagingCost(e.target.value)}
+                placeholder="optional"
+                style={{ background: '#16161a', borderColor: '#2a2a32', color: '#e8e6e2' }}
+              />
+            </div>
           </div>
           {error && (
             <p className="text-[12px]" style={{ color: '#ef4444' }}>{error}</p>

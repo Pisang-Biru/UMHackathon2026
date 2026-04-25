@@ -18,6 +18,7 @@ import { Route as BusinessCodeInboxRouteImport } from './routes/$businessCode/in
 import { Route as BusinessCodeDashboardRouteImport } from './routes/$businessCode/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as BusinessCodeAgentsAgentTypeRouteImport } from './routes/$businessCode/agents/$agentType'
+import { Route as BusinessCodeSettingsRouteImport } from './routes/$businessCode/settings'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -65,6 +66,11 @@ const BusinessCodeAgentsAgentTypeRoute =
     path: '/$businessCode/agents/$agentType',
     getParentRoute: () => rootRouteImport,
   } as any)
+const BusinessCodeSettingsRoute = BusinessCodeSettingsRouteImport.update({
+  id: '/$businessCode/settings',
+  path: '/$businessCode/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
+  '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
+  '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/$businessCode/inbox': typeof BusinessCodeInboxRoute
   '/$businessCode/products': typeof BusinessCodeProductsRoute
   '/$businessCode/sales': typeof BusinessCodeSalesRoute
+  '/$businessCode/settings': typeof BusinessCodeSettingsRoute
   '/pay/$orderId': typeof PayOrderIdRoute
   '/$businessCode/agents/$agentType': typeof BusinessCodeAgentsAgentTypeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/$businessCode/inbox'
     | '/$businessCode/products'
     | '/$businessCode/sales'
+    | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/$businessCode/inbox'
     | '/$businessCode/products'
     | '/$businessCode/sales'
+    | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/$businessCode/inbox'
     | '/$businessCode/products'
     | '/$businessCode/sales'
+    | '/$businessCode/settings'
     | '/pay/$orderId'
     | '/$businessCode/agents/$agentType'
     | '/api/auth/$'
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   BusinessCodeInboxRoute: typeof BusinessCodeInboxRoute
   BusinessCodeProductsRoute: typeof BusinessCodeProductsRoute
   BusinessCodeSalesRoute: typeof BusinessCodeSalesRoute
+  BusinessCodeSettingsRoute: typeof BusinessCodeSettingsRoute
   PayOrderIdRoute: typeof PayOrderIdRoute
   BusinessCodeAgentsAgentTypeRoute: typeof BusinessCodeAgentsAgentTypeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -199,6 +212,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BusinessCodeDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$businessCode/settings': {
+      id: '/$businessCode/settings'
+      path: '/$businessCode/settings'
+      fullPath: '/$businessCode/settings'
+      preLoaderRoute: typeof BusinessCodeSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   BusinessCodeInboxRoute: BusinessCodeInboxRoute,
   BusinessCodeProductsRoute: BusinessCodeProductsRoute,
   BusinessCodeSalesRoute: BusinessCodeSalesRoute,
+  BusinessCodeSettingsRoute: BusinessCodeSettingsRoute,
   PayOrderIdRoute: PayOrderIdRoute,
   BusinessCodeAgentsAgentTypeRoute: BusinessCodeAgentsAgentTypeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
