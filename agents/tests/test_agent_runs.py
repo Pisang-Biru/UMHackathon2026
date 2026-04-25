@@ -45,3 +45,34 @@ def test_record_run_swallows_db_error(monkeypatch):
 
     monkeypatch.setattr(runs_mod, "SessionLocal", bad_session)
     record_run(business_id="biz1", agent_type="x", kind="x", summary="x")  # no raise
+
+
+def test_backfill_is_idempotent(session):
+    from app.db import AgentAction, AgentActionStatus, AgentRun
+    from cuid2 import Cuid as _Cuid
+    _cuid = _Cuid().generate
+
+    # Insert one AgentAction representing legacy data (default agentType="support")
+    action_id = _cuid()
+    a = AgentAction(
+        id=action_id,
+        businessId="biz1",
+        customerMsg="hi",
+        draftReply="hello",
+        confidence=0.9,
+        reasoning="test",
+        status=AgentActionStatus.AUTO_SENT,
+    )
+    session.add(a)
+    session.commit()
+
+    from scripts.backfill_agent_runs import backfill
+
+    inserted_first = backfill()
+    inserted_second = backfill()
+
+    rows = session.query(AgentRun).filter_by(refTable="agent_action", refId=action_id).all()
+
+    assert inserted_first >= 1
+    assert inserted_second == 0
+    assert len(rows) == 1
