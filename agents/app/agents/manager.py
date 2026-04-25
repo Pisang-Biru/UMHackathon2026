@@ -190,7 +190,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         }
         try:
             emit(
-                agent_id="manager",
+                agent_id="customer_support",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),
@@ -201,7 +201,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         result = await jual_graph.ainvoke(sub_state)
         try:
             emit(
-                agent_id="customer_support",
+                agent_id="manager",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),
@@ -248,7 +248,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         }
         try:
             emit(
-                agent_id="manager",
+                agent_id="customer_support",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),
@@ -259,7 +259,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
         result = await jual_graph.ainvoke(sub_state)
         try:
             emit(
-                agent_id="customer_support",
+                agent_id="manager",
                 kind="handoff",
                 business_id=state.get("business_id"),
                 conversation_id=state.get("customer_id"),
