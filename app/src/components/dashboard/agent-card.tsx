@@ -1,12 +1,13 @@
 import { Play, Pause, MoreHorizontal } from 'lucide-react'
 
-type AgentStatus = 'live' | 'running' | 'finished' | 'idle'
+type AgentStatus = 'live' | 'running' | 'finished' | 'idle' | 'error'
 
 const STATUS_CONFIG: Record<AgentStatus, { label: string; bg: string; text: string; dot: string; animated: boolean }> = {
   live: { label: 'LIVE', bg: 'rgba(0,201,122,0.1)', text: '#00a863', dot: '#00c97a', animated: true },
   running: { label: 'RUNNING', bg: 'rgba(59,126,248,0.1)', text: '#3b7ef8', dot: '#3b7ef8', animated: true },
   finished: { label: 'FINISHED', bg: 'rgba(107,114,128,0.12)', text: '#555', dot: '#555', animated: false },
   idle: { label: 'IDLE', bg: 'rgba(245,158,11,0.08)', text: '#7a5a1a', dot: '#6a4e18', animated: false },
+  error: { label: 'ERROR', bg: 'rgba(239,68,68,0.12)', text: '#ef4444', dot: '#ef4444', animated: false },
 }
 
 function StatusPill({ status }: { status: AgentStatus }) {
@@ -35,6 +36,29 @@ export interface AgentCardData {
   avatar: string
   color: string
   queuedCount?: number
+}
+
+export function AgentCardSkeleton() {
+  const sk = { background: '#1e1e24', animation: 'pulse-skeleton 1.4s ease-in-out infinite' }
+  return (
+    <div
+      className="rounded-xl flex flex-col gap-2.5 p-3.5"
+      style={{ background: '#161618', border: '1px solid #1e1e24' }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-[26px] h-[26px] rounded-full" style={sk} />
+          <div className="h-3 w-20 rounded" style={sk} />
+        </div>
+        <div className="h-4 w-12 rounded-full" style={sk} />
+      </div>
+      <div className="h-12 rounded-lg" style={{ ...sk, background: '#0e0e10' }} />
+      <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: '#1e1e24' }}>
+        <div className="h-2.5 w-12 rounded" style={sk} />
+        <div className="h-2.5 w-10 rounded" style={sk} />
+      </div>
+    </div>
+  )
 }
 
 export function AgentCard({ agent, style }: { agent: AgentCardData; style?: React.CSSProperties }) {

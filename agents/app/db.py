@@ -1,7 +1,7 @@
 import os
 from sqlalchemy import (
     create_engine, Column, String, Float, Integer, Text, DateTime,
-    Enum as SAEnum, Numeric, text,
+    Enum as SAEnum, Numeric, text, BigInteger, Boolean, ForeignKey,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
@@ -83,6 +83,41 @@ class Order(Base):
     acknowledgedAt = Column(DateTime, nullable=True)
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class Agent(Base):
+    __tablename__ = "agents"
+    id = Column(Text, primary_key=True)
+    name = Column(Text, nullable=False)
+    role = Column(Text, nullable=False)
+    icon = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+
+
+class BusinessAgent(Base):
+    __tablename__ = "business_agents"
+    business_id = Column(Text, primary_key=True)
+    agent_id = Column(Text, ForeignKey("agents.id"), primary_key=True)
+    enabled = Column(Boolean, nullable=False, server_default=text("true"))
+
+
+class AgentEvent(Base):
+    __tablename__ = "agent_events"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    ts = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    agent_id = Column(Text, nullable=False)
+    business_id = Column(Text, nullable=True)
+    conversation_id = Column(Text, nullable=True)
+    task_id = Column(Text, nullable=True)
+    kind = Column(Text, nullable=False)
+    node = Column(Text, nullable=True)
+    status = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
+    reasoning = Column(Text, nullable=True)
+    trace = Column(JSONB, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    tokens_in = Column(Integer, nullable=True)
+    tokens_out = Column(Integer, nullable=True)
 
 
 # Register memory models with Base.metadata so Alembic sees them.

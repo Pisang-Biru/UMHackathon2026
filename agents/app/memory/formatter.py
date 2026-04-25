@@ -49,13 +49,37 @@ def memory_block(phone, recent_turns, summaries) -> str:
     return "\n".join(lines)
 
 
-def format_search_results(kind: str, hits) -> str:
+def format_search_results(kind: str, hits, *, query: str | None = None) -> str:
+    """Render a retrieval result for the LLM with stable, citable short ids.
+
+    Each hit gets `[id=<short>]` derived from its full pk via sha1[:8]. Empty
+    results render `[id=none:<query_hash8>]` so the LLM has a citable anchor
+    for negative claims ("I checked, no relevant docs"). On the rare short-id
+    collision within one result, all ids in that result bump to 12 chars.
+    """
+    import hashlib
+
+    def _short(full: str, n: int) -> str:
+        return hashlib.sha1(str(full).encode("utf-8")).hexdigest()[:n]
+
     hits = list(hits)
     if not hits:
-        return f"No results (kind={kind})."
+        q = query or ""
+        q_hash = _short(q, 8)
+        return (
+            f"No results (kind={kind}).\n"
+            f'[id=none:{q_hash}] for query "{q}"'
+        )
+
+    # Choose short-id width (8 default; bump to 12 on collision).
+    raw_ids = [str(getattr(h, "id", "")) for h in hits]
+    width = 8
+    if len({_short(r, 8) for r in raw_ids}) < len(raw_ids):
+        width = 12
+
     lines = [f"Found {len(hits)} results (kind={kind}):"]
-    for i, h in enumerate(hits, start=1):
+    for h, raw in zip(hits, raw_ids):
         sim = getattr(h, "similarity", 0.0)
         content = getattr(h, "content", None) or getattr(h, "customerMsg", None) or ""
-        lines.append(f"{i}. [sim={sim:.2f}] {content}")
+        lines.append(f"[id={_short(raw, width)} sim={sim:.2f}] {content}")
     return "\n".join(lines)

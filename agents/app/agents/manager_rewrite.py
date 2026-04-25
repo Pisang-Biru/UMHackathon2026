@@ -56,12 +56,19 @@ async def gates_only_check(state: dict) -> dict:
 
     for fact in rewrite_draft.facts_used:
         key = f"{fact.kind}:{fact.id}"
-        if key not in valid_ids:
-            _log.info("gates_only_outcome", extra={
-                "outcome": "escalate",
-                "reason_slug": f"ungrounded_fact:{fact.kind}:{fact.id}",
-            })
-            return {"final_action_hint": "escalate", "final_reply": rewrite_draft.reply}
+        if key in valid_ids:
+            continue
+        # Honor the negative-receipt wildcard the same way Gate 2 does.
+        if (
+            fact.id.startswith("none:")
+            and f"{fact.kind}:none:*" in valid_ids
+        ):
+            continue
+        _log.info("gates_only_outcome", extra={
+            "outcome": "escalate",
+            "reason_slug": f"ungrounded_fact:{fact.kind}:{fact.id}",
+        })
+        return {"final_action_hint": "escalate", "final_reply": rewrite_draft.reply}
 
     if rewrite_draft.needs_human:
         _log.info("gates_only_outcome", extra={"outcome": "escalate", "reason_slug": "rewrite_needs_human"})

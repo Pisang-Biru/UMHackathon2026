@@ -33,9 +33,41 @@ else:
     active_graph = support_graph
 
 app = FastAPI(title="LangGraph Agents API", version="0.1.0")
+
+from fastapi.middleware.cors import CORSMiddleware
+
+# Dev convenience: allow the local Vite frontend to call us directly.
+# Production should pin the exact origin instead of "*".
+_DEV_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_DEV_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+from app.agents.registry import upsert_registry
+
+
+@app.on_event("startup")
+def _boot_registry() -> None:
+    try:
+        upsert_registry()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("registry upsert failed")
+
+
 app.include_router(make_agent_router(chat_graph))
 app.include_router(make_support_router(active_graph))
 app.include_router(memory_router)
+
+from app.routers.events import router as events_router
+app.include_router(events_router)
 
 
 @app.get("/health")

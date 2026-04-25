@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import hashlib
 import logging
 from cuid2 import Cuid as _Cuid
 generate_cuid = _Cuid().generate
@@ -28,6 +29,15 @@ from app.memory.formatter import memory_block as format_memory_block
 from app.memory.formatter import format_search_results
 from typing import Literal as _Lit
 from app.schemas.agent_io import StructuredReply, FactRef, ManagerCritique
+from app.agents._traced import traced
+from app.events import emit
+
+AGENT_META = {
+    "id": "customer_support",
+    "name": "Sales Assistant",
+    "role": "Handles customer chat end-to-end",
+    "icon": "messages-square",
+}
 
 
 class SupportAgentState(TypedDict, total=False):
@@ -190,14 +200,15 @@ After any tool calls, respond with valid JSON only, no other text:
   "reasoning": "<one sentence explaining your confidence>",
   "addressed_questions": ["<buyer question you answered>", ...],
   "unaddressed_questions": ["<buyer question you did NOT answer, verbatim>", ...],
-  "facts_used": [{{"kind": "product|order|kb|memory", "id": "<id>"}}, ...],
+  "facts_used": [{{"kind": "product|order|kb|memory|memory:past_action|payment_link", "id": "<id>"}}, ...],
   "needs_human": <true only if refund / complaint / out-of-scope, else false>
 }}
 
 Rules for facts_used:
 - If you call create_payment_link, add {{"kind":"product","id":"<product_id>"}}.
-- If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference.
+- If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference. If the tool returns "no orders found for this phone", cite {{"kind":"order","id":"none:<digits-only phone>"}} — that is the citable negative.
 - If you quote a product price or stock number, add that product's {{"kind":"product","id":"<id>"}}.
+- If you reference content from search_memory, copy the [id=<short>] marker into facts_used as {{"kind":"<kind>","id":"<short>"}}. For kind="past_action", use {{"kind":"memory:past_action","id":"<short>"}}. For empty results, cite the [id=none:<hash>] marker — that grounds "I checked, found nothing".
 
 Confidence guide (for telemetry only, not routing):
 - 0.9+   : Direct factual answer from product data or tool output
@@ -233,9 +244,36 @@ async def _load_memory_node(state: SupportAgentState) -> dict:
     return {"memory_block": block}
 
 
+def _phone_key(phone: str | None) -> str:
+    """Lowercase, digits-only key. Used both at receipt emission and gate lookup
+    so 'none:<phone_key>' ids round-trip across formatting differences."""
+    return re.sub(r"\D", "", (phone or "").lower())
+
+
+def _short_id(full: str, n: int = 8) -> str:
+    """Stable short id derived from a full pk. Used by formatter and tools to
+    produce the citable short id LLM sees and gates verify."""
+    return hashlib.sha1(full.encode("utf-8")).hexdigest()[:n]
+
+
+def _query_hash8(query: str) -> str:
+    """8-char sha1 prefix of a query string; used as anchor for empty-result receipts."""
+    return hashlib.sha1((query or "").encode("utf-8")).hexdigest()[:8]
+
+
+def _safe_tool_return(text: str, receipts: list) -> tuple[str, list]:
+    """Success path. Receipts MUST reflect data the tool actually saw."""
+    return (text, receipts)
+
+
+def _error_tool_return(err: str) -> tuple[str, list]:
+    """Error path. NO receipts — Gate 5 will treat any downstream claim as ungrounded."""
+    return (f"ERROR: {err}", [])
+
+
 def _make_order_lookup_tool(business_id: str, customer_phone: str):
-    @tool
-    def check_order_status() -> str:
+    @tool(response_format="content_and_artifact")
+    def check_order_status() -> tuple[str, list]:
         """Look up the current buyer's recent orders and their payment status.
 
         Call this whenever the buyer asks about past purchases, current orders,
@@ -244,8 +282,9 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
 
         Returns up to 5 orders, newest first, or "no orders found for this phone".
         """
+        from app.schemas.agent_io import OrderReceipt
         if not customer_phone:
-            return "ERROR: no phone on file for this buyer"
+            return _error_tool_return("no phone on file for this buyer")
         try:
             with SessionLocal() as session:
                 rows = (
@@ -260,8 +299,12 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
                     .all()
                 )
             if not rows:
-                return "no orders found for this phone"
+                return _safe_tool_return(
+                    "no orders found for this phone",
+                    [OrderReceipt(id=f"none:{_phone_key(customer_phone)}")],
+                )
             lines = []
+            receipts = []
             for order, product_name in rows:
                 short_id = order.id[:10]
                 created = order.createdAt.date().isoformat() if order.createdAt else "?"
@@ -277,35 +320,84 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
                     pay_url = order.paymentUrl or f"{APP_URL}/pay/{order.id}"
                     parts.append(f"pay: {pay_url}")
                 lines.append(" • ".join(parts))
-            return "\n".join(lines)
+                receipts.append(OrderReceipt(id=order.id))
+            return _safe_tool_return("\n".join(lines), receipts)
         except Exception as e:
-            return f"ERROR: {e}"
+            return _error_tool_return(str(e))
     return check_order_status
 
 
 def _make_search_memory_tool(business_id: str):
-    @tool
-    def search_memory(query: str, kind: _Lit["kb", "product", "past_action"]) -> str:
+    @tool(response_format="content_and_artifact")
+    def search_memory(query: str, kind: _Lit["kb", "product", "past_action"]) -> tuple[str, list]:
         """Search business memory for context outside of the live conversation.
         Args:
             query: what to search for (buyer's phrasing or a paraphrase)
             kind: "kb" (FAQ/policy docs), "product" (fuzzy product match), or "past_action" (similar past buyer messages)
         Returns a numbered list of top matches with similarity scores, or "No results".
         """
-        q_vec = embed([query])[0]
-        with SessionLocal() as session:
-            if kind == "kb":
-                hits = memory_repo.search_kb(session, business_id, q_vec, k=5, min_sim=0.6)
-            elif kind == "product":
-                hits = memory_repo.search_products(session, business_id, q_vec, k=5, min_sim=0.5)
-            else:
-                hits = memory_repo.search_past_actions(session, business_id, q_vec, k=3, min_sim=0.7)
-        return format_search_results(kind, hits)
+        from app.schemas.agent_io import KbReceipt, ProductReceipt, PastActionReceipt
+        try:
+            q_vec = embed([query])[0]
+            with SessionLocal() as session:
+                if kind == "kb":
+                    hits = memory_repo.search_kb(session, business_id, q_vec, k=5, min_sim=0.6)
+                elif kind == "product":
+                    hits = memory_repo.search_products(session, business_id, q_vec, k=5, min_sim=0.5)
+                else:
+                    hits = memory_repo.search_past_actions(session, business_id, q_vec, k=3, min_sim=0.7)
+            text = format_search_results(kind, hits, query=query)
+            receipts = _build_memory_receipts(kind, hits, query)
+            return _safe_tool_return(text, receipts)
+        except Exception as e:
+            return _error_tool_return(str(e))
     return search_memory
+
+
+def _build_memory_receipts(kind: str, hits, query: str) -> list:
+    """Build receipts mirroring what format_search_results renders."""
+    from app.schemas.agent_io import KbReceipt, ProductReceipt, PastActionReceipt
+
+    hits = list(hits)
+    if not hits:
+        none_id = f"none:{_query_hash8(query)}"
+        if kind == "kb":
+            return [KbReceipt(id=none_id, chunk_id="-", sim=0.0)]
+        if kind == "product":
+            return [ProductReceipt(id=none_id)]
+        # past_action
+        return [PastActionReceipt(id=none_id, full_id="-", sim=0.0)]
+
+    raw_ids = [str(getattr(h, "id", "")) for h in hits]
+    # Match the formatter's collision-bump width.
+    width = 8 if len({_short_id(r, 8) for r in raw_ids}) == len(raw_ids) else 12
+
+    receipts = []
+    for h, raw in zip(hits, raw_ids):
+        sim = float(getattr(h, "similarity", 0.0))
+        if kind == "kb":
+            receipts.append(KbReceipt(id=_short_id(raw, width), chunk_id=raw, sim=sim))
+        elif kind == "product":
+            # Product receipts use the product id directly (already short and stable).
+            pid = str(getattr(h, "productId", raw))
+            receipts.append(ProductReceipt(id=pid))
+        else:
+            receipts.append(PastActionReceipt(id=_short_id(raw, width), full_id=raw, sim=sim))
+    return receipts
 
 
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _new_tool_messages(history: list[BaseMessage], orig_count: int) -> list[BaseMessage]:
+    """Pick out ToolMessage entries appended to history during the tool loop.
+
+    Filtered up to the manager so harvest_receipts can read tool artifacts.
+    AIMessage tool-call requests and intermediate prompts are intentionally
+    dropped — they're chat scaffolding, not grounding evidence.
+    """
+    return [m for m in history[orig_count:] if isinstance(m, ToolMessage)]
 
 
 def _try_parse_json_reply(text: str):
@@ -337,6 +429,20 @@ def _try_parse_json_reply(text: str):
 
 def build_customer_support_agent(llm):
     async def load_context(state: SupportAgentState) -> dict:
+        # message.in — snapshot the inbound customer utterance for the dashboard feed.
+        try:
+            last = state["messages"][-1] if state.get("messages") else None
+            inbound = getattr(last, "content", None) if last is not None else None
+            if inbound:
+                emit(
+                    agent_id="customer_support",
+                    kind="message.in",
+                    business_id=state.get("business_id"),
+                    conversation_id=state.get("customer_id"),
+                    summary=str(inbound)[:200],
+                )
+        except Exception:
+            pass  # telemetry must never break the flow
         context = _build_context(state["business_id"])
         return {"business_context": context}
 
@@ -369,6 +475,7 @@ def build_customer_support_agent(llm):
         )
 
         history: list[BaseMessage] = [SystemMessage(content=system_prompt)] + list(state["messages"])
+        _orig_msg_count = len(history)
 
         for _ in range(3):
             response = await llm_with_tools.ainvoke(history)
@@ -386,15 +493,33 @@ def build_customer_support_agent(llm):
                 if chosen is None:
                     history.append(ToolMessage(content=f"ERROR: unknown tool {call['name']}", tool_call_id=call["id"]))
                     continue
-                result = chosen.invoke(call["args"])
-                history.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
+                # Tool invocation: pass the full ToolCall dict.
+                # - For @tool(response_format="content_and_artifact"): returns ToolMessage with .artifact populated.
+                # - For plain @tool: returns ToolMessage with .artifact=None.
+                # Single convention covers both during the migration window.
+                tool_msg = chosen.invoke(call)
+                history.append(tool_msg)
 
         last = history[-1]
         last_text = last.content if isinstance(last.content, str) else ""
 
         direct = _try_parse_json_reply(last_text)
         if direct is not None:
+            # message.out — the model's drafted reply body.
+            try:
+                _out_text = direct.reply if hasattr(direct, "reply") else None
+                if _out_text:
+                    emit(
+                        agent_id="customer_support",
+                        kind="message.out",
+                        business_id=state.get("business_id"),
+                        conversation_id=state.get("customer_id"),
+                        summary=str(_out_text)[:200],
+                    )
+            except Exception:
+                pass
             return {
+                "messages": _new_tool_messages(history, _orig_msg_count),
                 "structured_reply": direct,
                 "draft_reply": direct.reply,
                 "confidence": float(direct.confidence),
@@ -405,7 +530,7 @@ def build_customer_support_agent(llm):
             "Produce the final reply as a single JSON object matching this schema:\n"
             '{"reply": "<text>", "confidence": <float>, "reasoning": "<sentence>", '
             '"addressed_questions": [...], "unaddressed_questions": [...], '
-            '"facts_used": [{"kind":"product|order|kb|memory","id":"<id>"}], '
+            '"facts_used": [{"kind":"product|order|kb|memory|memory:past_action|payment_link","id":"<id>"}], '
             '"needs_human": <bool>}\n'
             "Output ONLY the JSON object. No markdown fences, no prose before or after."
         ))
@@ -414,7 +539,21 @@ def build_customer_support_agent(llm):
             retry_text = response.content if isinstance(response.content, str) else ""
             retry_parsed = _try_parse_json_reply(retry_text)
             if retry_parsed is not None:
+                # message.out — the model's drafted reply body.
+                try:
+                    _out_text = retry_parsed.reply if hasattr(retry_parsed, "reply") else None
+                    if _out_text:
+                        emit(
+                            agent_id="customer_support",
+                            kind="message.out",
+                            business_id=state.get("business_id"),
+                            conversation_id=state.get("customer_id"),
+                            summary=str(_out_text)[:200],
+                        )
+                except Exception:
+                    pass
                 return {
+                    "messages": _new_tool_messages(history, _orig_msg_count),
                     "structured_reply": retry_parsed,
                     "draft_reply": retry_parsed.reply,
                     "confidence": float(retry_parsed.confidence),
@@ -430,7 +569,21 @@ def build_customer_support_agent(llm):
             reasoning="JSON parsing failed twice",
             needs_human=True,
         )
+        # message.out — the model's drafted reply body.
+        try:
+            _out_text = fallback.reply if hasattr(fallback, "reply") else None
+            if _out_text:
+                emit(
+                    agent_id="customer_support",
+                    kind="message.out",
+                    business_id=state.get("business_id"),
+                    conversation_id=state.get("customer_id"),
+                    summary=str(_out_text)[:200],
+                )
+        except Exception:
+            pass
         return {
+            "messages": _new_tool_messages(history, _orig_msg_count),
             "structured_reply": fallback,
             "draft_reply": fallback.reply,
             "confidence": 0.0,
@@ -465,8 +618,23 @@ def build_customer_support_agent(llm):
             "Respond with the same JSON schema as before. Emit JSON only."
         ))
         history = [SystemMessage(content=system_prompt), *state["messages"], revision_instruction]
+        _orig_msg_count = len(history)
         response = await llm.with_structured_output(StructuredReply).ainvoke(history)
+        # message.out — the model's drafted reply body.
+        try:
+            _out_text = response.reply if hasattr(response, "reply") else None
+            if _out_text:
+                emit(
+                    agent_id="customer_support",
+                    kind="message.out",
+                    business_id=state.get("business_id"),
+                    conversation_id=state.get("customer_id"),
+                    summary=str(_out_text)[:200],
+                )
+        except Exception:
+            pass
         return {
+            "messages": _new_tool_messages(history, _orig_msg_count),
             "structured_reply": response,
             "draft_reply": response.reply,
             "confidence": response.confidence,
@@ -477,10 +645,10 @@ def build_customer_support_agent(llm):
         return "redraft_reply" if state.get("revision_mode") == "redraft" else "load_context"
 
     graph = StateGraph(SupportAgentState)
-    graph.add_node("load_context", load_context)
-    graph.add_node("load_memory", _load_memory_node)
-    graph.add_node("draft_reply", draft_reply)
-    graph.add_node("redraft_reply", redraft_reply)
+    graph.add_node("load_context", traced(agent_id="customer_support", node="load_context")(load_context))
+    graph.add_node("load_memory", traced(agent_id="customer_support", node="load_memory")(_load_memory_node))
+    graph.add_node("draft_reply", traced(agent_id="customer_support", node="draft_reply")(draft_reply))
+    graph.add_node("redraft_reply", traced(agent_id="customer_support", node="redraft_reply")(redraft_reply))
 
     graph.add_conditional_edges(START, _entry_route, {
         "load_context": "load_context",
