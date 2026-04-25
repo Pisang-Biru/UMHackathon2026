@@ -8,6 +8,7 @@ from app.agents.manager_helpers import (
     resolve_final_reply, pick_best_draft_for_human, build_escalation_summary,
     jual_v1_reply, jual_v1_confidence,
 )
+from app.agents._runs import record_run
 
 _log = logging.getLogger(__name__)
 _gen_cuid = _Cuid().generate
@@ -58,6 +59,17 @@ def make_finalize_node():
             )
             session.add(record)
             session.commit()
+        record_run(
+            business_id=record.businessId,
+            agent_type="customer_support",
+            kind="handle_message",
+            summary=(record.customerMsg or "")[:200],
+            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
+                "FAILED" if record.status.name == "REJECTED" else "OK"
+            ),
+            payload={"confidence": record.confidence},
+            ref=("agent_action", record.id),
+        )
         _enqueue_memory_write(state, action_id, final_reply)
         _log.info("manager_turn_terminal", extra={
             "action_id": action_id, "final_action": "auto_send",
@@ -86,6 +98,17 @@ def make_queue_for_human_node():
             )
             session.add(record)
             session.commit()
+        record_run(
+            business_id=record.businessId,
+            agent_type="customer_support",
+            kind="handle_message",
+            summary=(record.customerMsg or "")[:200],
+            status="OK" if record.status.name in ("AUTO_SENT", "APPROVED") else (
+                "FAILED" if record.status.name == "REJECTED" else "OK"
+            ),
+            payload={"confidence": record.confidence},
+            ref=("agent_action", record.id),
+        )
         _log.info("manager_turn_terminal", extra={
             "action_id": action_id, "final_action": "escalate",
             "iteration_count": len(state["iterations"]),
