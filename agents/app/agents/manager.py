@@ -221,8 +221,10 @@ def build_manager_graph(*, jual_llm, manager_llm):
             "facts_used_count": len(draft.facts_used),
             "needs_human": draft.needs_human,
         })
-        sub_msgs = result.get("messages", []) or []
-        new_msgs = sub_msgs[len(state["messages"]):]
+        # jual_graph already returns only newly-generated tool messages
+        # (see _new_tool_messages); do not slice again or harvest_receipts
+        # will see an empty list and Gate 5 misclassifies grounded answers.
+        new_msgs = result.get("messages", []) or []
         return {
             "messages": new_msgs,
             "jual_draft": draft,
@@ -277,8 +279,7 @@ def build_manager_graph(*, jual_llm, manager_llm):
             "facts_used_count": len(draft.facts_used),
             "needs_human": draft.needs_human,
         })
-        sub_msgs = result.get("messages", []) or []
-        new_msgs = sub_msgs[len(state["messages"]):]
+        new_msgs = result.get("messages", []) or []
         return {
             "messages": new_msgs,
             "jual_draft": draft,
