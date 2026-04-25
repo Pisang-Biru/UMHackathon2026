@@ -98,6 +98,38 @@ async def test_revise_then_pass_ends_auto_sent(monkeypatch):
     assert row.iterations[0]["stage"] == "jual_v1"
     assert row.iterations[1]["stage"] == "jual_v2"
 
+    # ---- agent_events end-to-end check ----
+    from app.db import SessionLocal, AgentEvent
+
+    try:
+        with SessionLocal() as s:
+            evs = (
+                s.query(AgentEvent)
+                .filter(AgentEvent.conversation_id == "c1")
+                .order_by(AgentEvent.id)
+                .all()
+            )
+            agents_seen = {e.agent_id for e in evs}
+            kinds_seen = {e.kind for e in evs}
+            revise_evals = [
+                e for e in evs if e.node == "evaluate" and e.status == "revise"
+            ]
+
+        assert {"manager", "customer_support"}.issubset(agents_seen), (
+            f"missing agent in events: {agents_seen}"
+        )
+        assert "handoff" in kinds_seen, f"no handoff event recorded: {kinds_seen}"
+        assert len(revise_evals) >= 1, (
+            "expected at least one evaluate node.end with status=revise"
+        )
+    finally:
+        # cleanup so subsequent test runs start clean
+        with SessionLocal() as s:
+            s.query(AgentEvent).filter(
+                AgentEvent.conversation_id == "c1"
+            ).delete()
+            s.commit()
+
 
 @pytest.mark.asyncio
 async def test_rewrite_then_escalate_when_rewrite_hallucinates(monkeypatch):
