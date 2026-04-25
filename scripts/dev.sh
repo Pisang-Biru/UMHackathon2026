@@ -26,7 +26,7 @@ case "$cmd" in
     fi
 
     echo "==> building images"
-    $COMPOSE build
+    $COMPOSE --profile init build
 
     echo "==> starting infra"
     $COMPOSE up -d postgres rabbitmq
