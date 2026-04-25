@@ -2,7 +2,7 @@ import logging
 from cuid2 import Cuid as _Cuid
 from sqlalchemy import select
 from app.db import (
-    SessionLocal, Order, Product, Business,
+    SessionLocal, Order, OrderStatus, Product, Business,
     FinanceAlert, FinanceAlertKind, MarginStatus,
 )
 from app.agents.finance.margin import compute_margin
@@ -71,3 +71,33 @@ def check_order_margin(order_id: str) -> dict:
             "status": outcome.status.value,
             "real_margin": str(outcome.real_margin) if outcome.real_margin is not None else None,
         }
+
+
+@celery.task(name="finance.recompute_all_paid_margins")
+def recompute_all_paid_margins(business_id: str) -> dict:
+    """Operator-triggered backfill: run check_order_margin for every PAID
+    order belonging to the business. Returns counts."""
+    with SessionLocal() as s:
+        rows = s.execute(
+            select(Order.id).where(
+                Order.businessId == business_id,
+                Order.status == OrderStatus.PAID,
+            )
+        ).scalars().all()
+    n_ok = n_loss = n_missing = 0
+    for oid in rows:
+        out = check_order_margin(oid)
+        st = out.get("status")
+        if st == "OK":
+            n_ok += 1
+        elif st == "LOSS":
+            n_loss += 1
+        elif st == "MISSING_DATA":
+            n_missing += 1
+    return {
+        "ok": True,
+        "n_total": len(rows),
+        "n_ok": n_ok,
+        "n_loss": n_loss,
+        "n_missing": n_missing,
+    }

@@ -99,3 +99,18 @@ def test_loss_alert_dedup_per_order():
             FinanceAlert.resolvedAt.is_(None),
         )).scalars().all()
         assert len(rows) == 1
+
+
+def test_backfill_processes_all_paid_orders():
+    from app.worker.finance_check import recompute_all_paid_margins
+    with SessionLocal() as s:
+        bid, _, _ = _seed_basic(s)  # OK
+        _seed_basic(s, business_id=bid, cogs="90.00", total="100.00",
+                    transport="20.00", qty=1)  # LOSS
+        _seed_basic(s, business_id=bid, cogs=None)  # MISSING_DATA
+    out = recompute_all_paid_margins(bid)
+    assert out["ok"] is True
+    assert out["n_total"] == 3
+    assert out["n_ok"] == 1
+    assert out["n_loss"] == 1
+    assert out["n_missing"] == 1

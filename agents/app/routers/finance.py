@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 
 from app.db import SessionLocal, Order, FinanceAlert
-from app.worker.finance_check import check_order_margin
+from app.worker.finance_check import check_order_margin, recompute_all_paid_margins
 from app.agents.finance.agent import build_finance_agent
 
 router = APIRouter(prefix="/finance", tags=["finance"])
@@ -43,6 +43,11 @@ def resolve_alert(alert_id: str) -> dict:
         alert.resolvedAt = datetime.now(timezone.utc)
         s.commit()
         return {"ok": True, "resolvedAt": alert.resolvedAt.isoformat()}
+
+
+@router.post("/backfill/{business_id}")
+def trigger_backfill(business_id: str) -> dict:
+    return recompute_all_paid_margins(business_id)
 
 
 @router.post("/chat")
