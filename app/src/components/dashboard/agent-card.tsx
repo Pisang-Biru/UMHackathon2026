@@ -1,12 +1,13 @@
 import { Play, Pause, MoreHorizontal } from 'lucide-react'
 
-type AgentStatus = 'live' | 'running' | 'finished' | 'idle'
+type AgentStatus = 'live' | 'running' | 'finished' | 'idle' | 'error'
 
 const STATUS_CONFIG: Record<AgentStatus, { label: string; bg: string; text: string; dot: string; animated: boolean }> = {
   live: { label: 'LIVE', bg: 'rgba(0,201,122,0.1)', text: '#00a863', dot: '#00c97a', animated: true },
   running: { label: 'RUNNING', bg: 'rgba(59,126,248,0.1)', text: '#3b7ef8', dot: '#3b7ef8', animated: true },
   finished: { label: 'FINISHED', bg: 'rgba(107,114,128,0.12)', text: '#555', dot: '#555', animated: false },
   idle: { label: 'IDLE', bg: 'rgba(245,158,11,0.08)', text: '#7a5a1a', dot: '#6a4e18', animated: false },
+  error: { label: 'ERROR', bg: 'rgba(239,68,68,0.12)', text: '#ef4444', dot: '#ef4444', animated: false },
 }
 
 function StatusPill({ status }: { status: AgentStatus }) {
