@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -95,6 +94,7 @@ model Business {
   products     Product[]
   agentActions AgentAction[]
   orders       Order[]
+  goals        Goal[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -128,23 +128,23 @@ enum AgentActionStatus {
 }
 
 model AgentAction {
-  id          String            @id @default(cuid())
-  businessId  String
-  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customerMsg String
-  draftReply  String
-  finalReply  String?
-  confidence  Float
-  reasoning   String
-  status      AgentActionStatus @default(PENDING)
-  viewedAt    DateTime?
-  agentType   String            @default("support")
-  inputTokens   Int?
-  outputTokens  Int?
-  cachedTokens  Int?
-  costUsd       Decimal? @db.Decimal(10, 6)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id           String            @id @default(cuid())
+  businessId   String
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerMsg  String
+  draftReply   String
+  finalReply   String?
+  confidence   Float
+  reasoning    String
+  status       AgentActionStatus @default(PENDING)
+  viewedAt     DateTime?
+  agentType    String            @default("support")
+  inputTokens  Int?
+  outputTokens Int?
+  cachedTokens Int?
+  costUsd      Decimal?          @db.Decimal(10, 6)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@map("agent_action")
   @@schema("public")
@@ -159,27 +159,50 @@ enum OrderStatus {
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  businessId      String
-  business        Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  productId       String
-  product         Product     @relation(fields: [productId], references: [id])
-  agentType       String?
-  qty             Int
-  unitPrice       Decimal     @db.Decimal(10, 2)
-  totalAmount     Decimal     @db.Decimal(10, 2)
-  status          OrderStatus @default(PENDING_PAYMENT)
-  buyerName       String?
-  buyerContact    String?
-  paymentUrl      String?
-  groupId         String?
-  paidAt          DateTime?
-  acknowledgedAt  DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id             String      @id @default(cuid())
+  businessId     String
+  business       Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id])
+  agentType      String?
+  qty            Int
+  unitPrice      Decimal     @db.Decimal(10, 2)
+  totalAmount    Decimal     @db.Decimal(10, 2)
+  status         OrderStatus @default(PENDING_PAYMENT)
+  buyerName      String?
+  buyerContact   String?
+  paymentUrl     String?
+  groupId        String?
+  paidAt         DateTime?
+  acknowledgedAt DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  @@map("order")
   @@index([businessId, status])
   @@index([groupId])
+  @@map("order")
+  @@schema("public")
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+
+  @@schema("public")
+}
+
+model Goal {
+  id         String     @id @default(cuid())
+  businessId String
+  business   Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  text       String
+  status     GoalStatus @default(ACTIVE)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+
+  @@index([businessId, deletedAt, status, createdAt])
+  @@map("goal")
   @@schema("public")
 }
