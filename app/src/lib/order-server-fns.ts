@@ -23,6 +23,8 @@ function serializeOrder(o: any) {
     ...o,
     unitPrice: o.unitPrice == null ? null : Number(o.unitPrice),
     totalAmount: o.totalAmount == null ? null : Number(o.totalAmount),
+    transportCost: o.transportCost == null ? null : Number(o.transportCost),
+    realMargin: o.realMargin == null ? null : Number(o.realMargin),
   }
 }
 
