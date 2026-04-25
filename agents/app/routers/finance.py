@@ -1,9 +1,11 @@
 import os
+import time
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
+from app.agents._runs import record_run
 
 from app.db import SessionLocal, Order, FinanceAlert
 from app.worker.finance_check import check_order_margin, recompute_all_paid_margins
@@ -56,6 +58,21 @@ async def finance_chat(payload: FinanceChatIn) -> dict:
         "business_id": payload.business_id,
         "messages": [HumanMessage(content=payload.message)],
     }
-    out = await _finance_graph.ainvoke(state)
-    last = out["messages"][-1]
-    return {"reply": getattr(last, "content", ""), "agent_id": "finance"}
+    started = time.perf_counter()
+    status = "OK"
+    try:
+        out = await _finance_graph.ainvoke(state)
+        last = out["messages"][-1]
+        return {"reply": getattr(last, "content", ""), "agent_id": "finance"}
+    except Exception:
+        status = "FAILED"
+        raise
+    finally:
+        record_run(
+            business_id=payload.business_id,
+            agent_type="finance",
+            kind="chat",
+            summary=(payload.message or "")[:200],
+            status=status,
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )

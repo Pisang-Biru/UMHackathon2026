@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
@@ -8,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from app.db import SessionLocal, AgentAction, AgentActionStatus
 from app.memory.phone import normalize_phone
 from app.agents.finance.agent import is_finance_intent
+from app.agents._runs import record_run
 from app.agents.manager import _load_business_context_cached
 from typing import Optional
 
@@ -168,13 +170,28 @@ def make_support_router(support_graph):
                     "business_id": req.business_id,
                     "messages": [HumanMessage(content=req.message)],
                 }
-                fin_out = await _finance_graph.ainvoke(state)
-                fin_last = fin_out["messages"][-1]
-                return SupportChatResponse(
-                    status="auto_send",
-                    reply=getattr(fin_last, "content", ""),
-                    confidence=0.9,
-                )
+                started = time.perf_counter()
+                status = "OK"
+                try:
+                    fin_out = await _finance_graph.ainvoke(state)
+                    fin_last = fin_out["messages"][-1]
+                    return SupportChatResponse(
+                        status="auto_send",
+                        reply=getattr(fin_last, "content", ""),
+                        confidence=0.9,
+                    )
+                except Exception:
+                    status = "FAILED"
+                    raise
+                finally:
+                    record_run(
+                        business_id=req.business_id,
+                        agent_type="finance",
+                        kind="chat",
+                        summary=(req.message or "")[:200],
+                        status=status,
+                        duration_ms=int((time.perf_counter() - started) * 1000),
+                    )
 
             result = await _support_graph_ainvoke({
                 "messages": [HumanMessage(content=req.message)],
