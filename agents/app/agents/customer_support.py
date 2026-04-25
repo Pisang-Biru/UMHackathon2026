@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import hashlib
 import logging
 from cuid2 import Cuid as _Cuid
 generate_cuid = _Cuid().generate
@@ -205,7 +206,7 @@ After any tool calls, respond with valid JSON only, no other text:
 
 Rules for facts_used:
 - If you call create_payment_link, add {{"kind":"product","id":"<product_id>"}}.
-- If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference.
+- If you call check_order_status, add {{"kind":"order","id":"<order_id>"}} for each order you reference. If the tool returns "no orders found for this phone", cite {{"kind":"order","id":"none:<digits-only phone>"}} — that is the citable negative.
 - If you quote a product price or stock number, add that product's {{"kind":"product","id":"<id>"}}.
 
 Confidence guide (for telemetry only, not routing):
@@ -243,8 +244,8 @@ async def _load_memory_node(state: SupportAgentState) -> dict:
 
 
 def _make_order_lookup_tool(business_id: str, customer_phone: str):
-    @tool
-    def check_order_status() -> str:
+    @tool(response_format="content_and_artifact")
+    def check_order_status() -> tuple[str, list]:
         """Look up the current buyer's recent orders and their payment status.
 
         Call this whenever the buyer asks about past purchases, current orders,
@@ -253,8 +254,9 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
 
         Returns up to 5 orders, newest first, or "no orders found for this phone".
         """
+        from app.schemas.agent_io import OrderReceipt
         if not customer_phone:
-            return "ERROR: no phone on file for this buyer"
+            return _error_tool_return("no phone on file for this buyer")
         try:
             with SessionLocal() as session:
                 rows = (
@@ -269,8 +271,12 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
                     .all()
                 )
             if not rows:
-                return "no orders found for this phone"
+                return _safe_tool_return(
+                    "no orders found for this phone",
+                    [OrderReceipt(id=f"none:{_phone_key(customer_phone)}")],
+                )
             lines = []
+            receipts = []
             for order, product_name in rows:
                 short_id = order.id[:10]
                 created = order.createdAt.date().isoformat() if order.createdAt else "?"
@@ -286,9 +292,10 @@ def _make_order_lookup_tool(business_id: str, customer_phone: str):
                     pay_url = order.paymentUrl or f"{APP_URL}/pay/{order.id}"
                     parts.append(f"pay: {pay_url}")
                 lines.append(" • ".join(parts))
-            return "\n".join(lines)
+                receipts.append(OrderReceipt(id=order.id))
+            return _safe_tool_return("\n".join(lines), receipts)
         except Exception as e:
-            return f"ERROR: {e}"
+            return _error_tool_return(str(e))
     return check_order_status
 
 
@@ -315,6 +322,32 @@ def _make_search_memory_tool(business_id: str):
 
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _phone_key(phone: str | None) -> str:
+    """Lowercase, digits-only key. Used both at receipt emission and gate lookup
+    so 'none:<phone_key>' ids round-trip across formatting differences."""
+    return re.sub(r"\D", "", (phone or "").lower())
+
+
+def _short_id(full: str, n: int = 8) -> str:
+    """Stable short id derived from a full pk. Used by formatter and tools to
+    produce the citable short id LLM sees and gates verify."""
+    return hashlib.sha1(full.encode("utf-8")).hexdigest()[:n]
+
+
+def _query_hash8(query: str) -> str:
+    return hashlib.sha1((query or "").encode("utf-8")).hexdigest()[:8]
+
+
+def _safe_tool_return(text: str, receipts: list) -> tuple[str, list]:
+    """Success path. Receipts MUST reflect data the tool actually saw."""
+    return (text, receipts)
+
+
+def _error_tool_return(err: str) -> tuple[str, list]:
+    """Error path. NO receipts — Gate 5 will treat any downstream claim as ungrounded."""
+    return (f"ERROR: {err}", [])
 
 
 def _new_tool_messages(history: list[BaseMessage], orig_count: int) -> list[BaseMessage]:
