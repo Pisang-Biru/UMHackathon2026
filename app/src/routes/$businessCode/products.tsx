@@ -39,7 +39,6 @@ function ProductsPage() {
     initialProducts.map((p) => ({
       ...p,
       price: typeof p.price === 'number' ? p.price : Number(p.price),
-      cogs: p.cogs ?? null,
       packagingCost: p.packagingCost ?? null,
     })) as Product[]
   )
@@ -59,7 +58,6 @@ function ProductsPage() {
       price: product.price,
       stock: product.stock,
       description: product.description ?? '',
-      cogs: product.cogs ?? null,
       packagingCost: product.packagingCost ?? null,
     })
     setDialogOpen(true)
@@ -81,14 +79,12 @@ function ProductsPage() {
           price: data.price,
           stock: data.stock,
           description: data.description,
-          cogs: data.cogs,
           packagingCost: data.packagingCost,
         },
       })
       const updatedProduct: Product = {
         ...updated,
         price: typeof updated.price === 'number' ? updated.price : Number(updated.price),
-        cogs: updated.cogs ?? null,
         packagingCost: updated.packagingCost ?? null,
       }
       setProducts((prev) =>
@@ -102,14 +98,12 @@ function ProductsPage() {
           price: data.price,
           stock: data.stock,
           description: data.description,
-          cogs: data.cogs,
           packagingCost: data.packagingCost,
         },
       })
       const createdProduct: Product = {
         ...created,
         price: typeof created.price === 'number' ? created.price : Number(created.price),
-        cogs: created.cogs ?? null,
         packagingCost: created.packagingCost ?? null,
       }
       setProducts((prev) => [...prev, createdProduct])

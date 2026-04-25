@@ -23,11 +23,10 @@ def _seed_loss():
                        defaultTransportCost=Decimal("0")))
         s.flush()
         s.add(Product(id=pid, name="P", price=Decimal("100"), stock=1,
-                      businessId=bid, cogs=Decimal("90"),
-                      packagingCost=Decimal("2")))
+                      businessId=bid, packagingCost=Decimal("2")))
         s.flush()
         s.add(Order(id=oid, businessId=bid, productId=pid, qty=1,
-                    unitPrice=Decimal("100"), totalAmount=Decimal("100"),
+                    unitPrice=Decimal("10"), totalAmount=Decimal("10"),
                     status=OrderStatus.PAID, paidAt=datetime.now(timezone.utc),
                     transportCost=Decimal("20")))
         s.commit()

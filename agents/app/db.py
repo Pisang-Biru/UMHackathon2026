@@ -56,7 +56,6 @@ class Product(Base):
     stock = Column(Integer, nullable=False, default=0)
     description = Column(Text, nullable=True)
     businessId = Column(String, nullable=False)
-    cogs = Column(Numeric(10, 2), nullable=True)
     packagingCost = Column(Numeric(10, 2), nullable=True)
     createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

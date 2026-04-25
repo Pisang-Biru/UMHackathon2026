@@ -16,20 +16,17 @@ def _dec_str(v) -> Optional[str]:
 
 @tool
 def get_product_costs(product_id: str) -> dict:
-    """Return cogs, packagingCost, and which fields are missing for a product."""
+    """Return packagingCost and which fields are missing for a product."""
     with SessionLocal() as s:
         p = s.get(Product, product_id)
         if p is None:
             return {"error": "product not found"}
         missing = []
-        if p.cogs is None:
-            missing.append("cogs")
         if p.packagingCost is None:
             missing.append("packagingCost")
         return {
             "id": p.id,
             "name": p.name,
-            "cogs": _dec_str(p.cogs),
             "packagingCost": _dec_str(p.packagingCost),
             "missing_fields": missing,
         }
@@ -82,14 +79,12 @@ def list_missing_data_products(business_id: str) -> list[dict]:
         rows = s.execute(
             select(Product).where(
                 Product.businessId == business_id,
-                (Product.cogs.is_(None)) | (Product.packagingCost.is_(None)),
+                Product.packagingCost.is_(None),
             )
         ).scalars().all()
         out = []
         for p in rows:
             missing = []
-            if p.cogs is None:
-                missing.append("cogs")
             if p.packagingCost is None:
                 missing.append("packagingCost")
             out.append({"id": p.id, "name": p.name, "missing_fields": missing})

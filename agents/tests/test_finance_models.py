@@ -4,7 +4,6 @@ from app.db import Product, Business, Order, FinanceAlert, MarginStatus, Finance
 
 def test_product_has_cost_columns():
     cols = {c.name for c in Product.__table__.columns}
-    assert "cogs" in cols
     assert "packagingCost" in cols
 
 

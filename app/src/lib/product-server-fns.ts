@@ -36,7 +36,6 @@ export const fetchProducts = createServerFn({ method: 'GET' })
     return products.map(p => ({
       ...p,
       price: p.price.toNumber(),
-      cogs: p.cogs ? p.cogs.toNumber() : null,
       packagingCost: p.packagingCost ? p.packagingCost.toNumber() : null,
     }))
   })
@@ -49,11 +48,6 @@ export const createProduct = createServerFn({ method: 'POST' })
     if (typeof d.name !== 'string' || d.name.trim().length < 1) throw new Error('name required')
     if (typeof d.price !== 'number' || d.price < 0) throw new Error('price must be a non-negative number')
     if (typeof d.stock !== 'number' || d.stock < 0 || !Number.isInteger(d.stock)) throw new Error('stock must be a non-negative integer')
-    const cogs =
-      d.cogs === null ? null
-      : typeof d.cogs === 'number' && d.cogs >= 0 ? d.cogs
-      : d.cogs === undefined ? undefined
-      : (() => { throw new Error('cogs must be a non-negative number or null') })()
     const packagingCost =
       d.packagingCost === null ? null
       : typeof d.packagingCost === 'number' && d.packagingCost >= 0 ? d.packagingCost
@@ -65,7 +59,6 @@ export const createProduct = createServerFn({ method: 'POST' })
       price: d.price,
       stock: d.stock,
       description: typeof d.description === 'string' ? d.description.trim() || undefined : undefined,
-      cogs,
       packagingCost,
     }
   })
@@ -73,7 +66,6 @@ export const createProduct = createServerFn({ method: 'POST' })
     const session = await requireSession()
     await requireBusinessOwner(data.businessId, session.user.id)
     const cost: Record<string, number | null> = {}
-    if (data.cogs !== undefined) cost.cogs = data.cogs
     if (data.packagingCost !== undefined) cost.packagingCost = data.packagingCost
     const product = await prisma.product.create({
       data: {
@@ -89,7 +81,6 @@ export const createProduct = createServerFn({ method: 'POST' })
     return {
       ...product,
       price: product.price.toNumber(),
-      cogs: product.cogs ? product.cogs.toNumber() : null,
       packagingCost: product.packagingCost ? product.packagingCost.toNumber() : null,
     }
   })
@@ -103,11 +94,6 @@ export const updateProduct = createServerFn({ method: 'POST' })
     if (typeof d.name !== 'string' || d.name.trim().length < 1) throw new Error('name required')
     if (typeof d.price !== 'number' || d.price < 0) throw new Error('price must be a non-negative number')
     if (typeof d.stock !== 'number' || d.stock < 0 || !Number.isInteger(d.stock)) throw new Error('stock must be a non-negative integer')
-    const cogs =
-      d.cogs === null ? null
-      : typeof d.cogs === 'number' && d.cogs >= 0 ? d.cogs
-      : d.cogs === undefined ? undefined
-      : (() => { throw new Error('cogs must be a non-negative number or null') })()
     const packagingCost =
       d.packagingCost === null ? null
       : typeof d.packagingCost === 'number' && d.packagingCost >= 0 ? d.packagingCost
@@ -120,7 +106,6 @@ export const updateProduct = createServerFn({ method: 'POST' })
       price: d.price,
       stock: d.stock,
       description: typeof d.description === 'string' ? d.description.trim() || undefined : undefined,
-      cogs,
       packagingCost,
     }
   })
@@ -132,7 +117,6 @@ export const updateProduct = createServerFn({ method: 'POST' })
     })
     if (!product || product.business.userId !== session.user.id) throw new Error('Product not found or access denied')
     const cost: Record<string, number | null> = {}
-    if (data.cogs !== undefined) cost.cogs = data.cogs
     if (data.packagingCost !== undefined) cost.packagingCost = data.packagingCost
     const updated = await prisma.product.update({
       where: { id: data.id },
@@ -142,7 +126,6 @@ export const updateProduct = createServerFn({ method: 'POST' })
     return {
       ...updated,
       price: updated.price.toNumber(),
-      cogs: updated.cogs ? updated.cogs.toNumber() : null,
       packagingCost: updated.packagingCost ? updated.packagingCost.toNumber() : null,
     }
   })

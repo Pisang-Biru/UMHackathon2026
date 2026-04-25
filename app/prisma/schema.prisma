@@ -117,7 +117,6 @@ model Product {
   alerts        FinanceAlert[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  cogs          Decimal? @db.Decimal(10, 2)
   packagingCost Decimal? @db.Decimal(10, 2)
 
   @@map("product")

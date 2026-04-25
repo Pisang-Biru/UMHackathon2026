@@ -12,7 +12,7 @@ from app.worker.finance_check import check_order_margin
 cuid = Cuid().generate
 
 
-def _seed_basic(session, *, cogs="40.00", packaging="2.00",
+def _seed_basic(session, *, packaging="2.00",
                 transport="10.00", fee="0.05",
                 qty=2, total="200.00",
                 business_id=None):
@@ -30,7 +30,6 @@ def _seed_basic(session, *, cogs="40.00", packaging="2.00",
     session.add(Product(
         id=pid, name="P", price=Decimal("100.00"), stock=10,
         businessId=bid,
-        cogs=Decimal(cogs) if cogs else None,
         packagingCost=Decimal(packaging) if packaging else None,
     ))
     session.flush()
@@ -51,14 +50,15 @@ def test_ok_writes_margin_no_alert():
     with SessionLocal() as s:
         order = s.get(Order, oid)
         assert order.marginStatus == MarginStatus.OK
-        assert order.realMargin == Decimal("96.00")
+        # revenue 200 - packaging 4 - transport 10 - fee 10 = 176.00
+        assert order.realMargin == Decimal("176.00")
         alerts = s.execute(select(FinanceAlert).where(FinanceAlert.orderId == oid)).all()
         assert alerts == []
 
 
 def test_loss_inserts_alert():
     with SessionLocal() as s:
-        bid, pid, oid = _seed_basic(s, cogs="90.00", total="100.00", transport="20.00", qty=1)
+        bid, pid, oid = _seed_basic(s, total="10.00", transport="15.00", qty=1, packaging="2.00")
     check_order_margin(oid)
     with SessionLocal() as s:
         order = s.get(Order, oid)
@@ -73,7 +73,7 @@ def test_loss_inserts_alert():
 
 def test_missing_data_inserts_alert_dedup_per_product():
     with SessionLocal() as s:
-        bid, pid, oid = _seed_basic(s, cogs=None)
+        bid, pid, oid = _seed_basic(s, packaging=None)
     check_order_margin(oid)
     check_order_margin(oid)  # idempotent re-run
     with SessionLocal() as s:
@@ -90,7 +90,7 @@ def test_missing_data_inserts_alert_dedup_per_product():
 
 def test_loss_alert_dedup_per_order():
     with SessionLocal() as s:
-        bid, pid, oid = _seed_basic(s, cogs="90.00", total="100.00", transport="20.00", qty=1)
+        bid, pid, oid = _seed_basic(s, total="10.00", transport="15.00", qty=1, packaging="2.00")
     check_order_margin(oid)
     check_order_margin(oid)
     with SessionLocal() as s:
@@ -105,9 +105,9 @@ def test_backfill_processes_all_paid_orders():
     from app.worker.finance_check import recompute_all_paid_margins
     with SessionLocal() as s:
         bid, _, _ = _seed_basic(s)  # OK
-        _seed_basic(s, business_id=bid, cogs="90.00", total="100.00",
-                    transport="20.00", qty=1)  # LOSS
-        _seed_basic(s, business_id=bid, cogs=None)  # MISSING_DATA
+        _seed_basic(s, business_id=bid, total="10.00",
+                    transport="15.00", qty=1, packaging="2.00")  # LOSS
+        _seed_basic(s, business_id=bid, packaging=None)  # MISSING_DATA
     out = recompute_all_paid_margins(bid)
     assert out["ok"] is True
     assert out["n_total"] == 3

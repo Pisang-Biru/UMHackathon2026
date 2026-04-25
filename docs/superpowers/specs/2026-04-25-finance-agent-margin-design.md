@@ -2,6 +2,7 @@
 
 **Date:** 2026-04-25
 **Status:** Design approved, ready for implementation plan
+**Updated 2026-04-25:** COGS dropped per product simplification — selling price is the only price field.
 **Scope:** Subset 1 of 4 of the broader "financing agents" idea. Covers cost data foundation and a real-margin agent that warns when an order's apparent profit is actually a loss. Sales analytics, sales prediction, and cash-position forecasting are explicitly out of scope and will be brainstormed as separate specs.
 
 ## Problem
@@ -50,11 +51,10 @@ All new tables and columns live in `public` and are owned by the Prisma migrator
 ### Product (extend)
 
 ```prisma
-cogs           Decimal? @db.Decimal(10, 2)   // unit cost of goods
 packagingCost  Decimal? @db.Decimal(10, 2)   // per-unit packaging
 ```
 
-Both nullable. Missing values cause `MarginStatus = MISSING_DATA` for any order using the product.
+Nullable. Missing value causes `MarginStatus = MISSING_DATA` for any order using the product.
 
 ### Business (extend)
 
@@ -109,16 +109,15 @@ A `LOSS` alert is keyed by `orderId`; a `MISSING_DATA` alert is keyed by `produc
 
 ```
 revenue       = order.totalAmount
-cogs_total    = product.cogs * order.qty
 pack_total    = product.packagingCost * order.qty
 transport     = order.transportCost
 platform_fee  = revenue * business.platformFeePct
-real_margin   = revenue - cogs_total - pack_total - transport - platform_fee
+real_margin   = revenue - pack_total - transport - platform_fee
 ```
 
 Status decision:
 
-- If any of `cogs`, `packagingCost`, `transportCost` is null → `MISSING_DATA`, `realMargin = null`.
+- If any of `packagingCost`, `transportCost` is null → `MISSING_DATA`, `realMargin = null`.
 - Else if `real_margin < 0` → `LOSS`.
 - Else → `OK`.
 

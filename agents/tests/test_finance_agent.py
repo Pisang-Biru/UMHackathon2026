@@ -28,9 +28,9 @@ def _seed():
                        defaultTransportCost=Decimal("0")))
         s.flush()
         s.add(Product(id=p_full, name="Full", price=Decimal("100"), stock=10,
-                      businessId=bid, cogs=Decimal("40"), packagingCost=Decimal("2")))
+                      businessId=bid, packagingCost=Decimal("2")))
         s.add(Product(id=p_missing, name="Missing", price=Decimal("50"), stock=10,
-                      businessId=bid, cogs=None, packagingCost=Decimal("1")))
+                      businessId=bid, packagingCost=None))
         s.flush()
         now = datetime.now(timezone.utc)
         s.add(Order(id=o_loss, businessId=bid, productId=p_full, qty=1,
@@ -52,14 +52,13 @@ def _seed():
 def test_get_product_costs_full():
     bid, p_full, *_ = _seed()
     out = get_product_costs.invoke({"product_id": p_full})
-    assert out["cogs"] == "40.00"
     assert out["missing_fields"] == []
 
 
 def test_get_product_costs_missing():
     bid, _, p_missing, *_ = _seed()
     out = get_product_costs.invoke({"product_id": p_missing})
-    assert "cogs" in out["missing_fields"]
+    assert "packagingCost" in out["missing_fields"]
 
 
 def test_get_order_margin():
