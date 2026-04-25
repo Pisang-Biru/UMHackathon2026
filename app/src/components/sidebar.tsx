@@ -15,6 +15,7 @@ import {
   Inbox,
   TrendingUp,
   Instagram,
+  MessageCircle,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
   { icon: Inbox, label: 'Inbox', route: 'inbox' },
   { icon: ShoppingBag, label: 'Products', route: 'products' },
   { icon: TrendingUp, label: 'Sales', route: 'sales' },
+  { icon: MessageCircle, label: 'WhatsApp', route: 'whatsapp' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
   { icon: Target, label: 'Goals', route: 'goals' },
