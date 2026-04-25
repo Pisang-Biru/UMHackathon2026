@@ -100,18 +100,13 @@ def _enqueue_from_state(state, action_id: str):
 
 
 def _build_context(business_id: str) -> str:
-    from app.agents.goals_prompt import load_active_goals_block
-
     with SessionLocal() as session:
         business = session.query(Business).filter(Business.id == business_id).first()
         if not business:
             raise ValueError(f"Business {business_id} not found")
         products = session.query(Product).filter(Product.businessId == business_id).all()
-        goals_block = load_active_goals_block(session, business_id)
 
     lines = [f"Business: {business.name}"]
-    if business.mission:
-        lines.append(f"About: {business.mission}")
 
     if products:
         lines.append("\nProducts available (use product id when creating payment links):")
@@ -122,7 +117,7 @@ def _build_context(business_id: str) -> str:
     else:
         lines.append("\nNo products listed yet.")
 
-    return "\n".join(lines) + goals_block
+    return "\n".join(lines)
 
 
 def _create_order(business_id: str, product_id: str, qty: int, buyer_contact: str | None = None) -> tuple[str, str]:
@@ -241,8 +236,10 @@ Your job:
 Purchase flow:
 - If the buyer wants to purchase one or more products, call create_payment_link ONCE with ALL items as a single list. Do NOT call it multiple times — one call per buyer turn covers the whole cart.
 - The tool argument is `items`, a list of objects: [{{"product_id": "<id>", "qty": <int>}}, ...].
+- Use the bracketed [id] from the product list above as `product_id` — never the product name. `qty` must be a positive integer (not a string).
 - The tool returns ONE payment URL covering every line item. Include that single URL verbatim in your reply.
 - Never invent a payment URL. Never produce more than one payment URL per cart.
+- If the tool returns text starting with `ERROR:`, the link was NOT created. Tell the buyer the literal reason in their language (e.g. "Stok habis untuk Choco Jar", "Produk tak jumpa"). Do NOT claim a technical/system failure. Do NOT set needs_human for tool errors — they are normal business outcomes.
 
 Order status flow:
 - If the buyer asks about past purchases, existing orders, or whether a payment succeeded, call check_order_status (no arguments — it knows the current buyer).
@@ -256,7 +253,7 @@ After any tool calls, respond with valid JSON only, no other text:
   "addressed_questions": ["<buyer question you answered>", ...],
   "unaddressed_questions": ["<buyer question you did NOT answer, verbatim>", ...],
   "facts_used": [{{"kind": "product|order|kb|memory|memory:past_action", "id": "<id>"}}, ...],
-  "needs_human": <true only if refund / complaint / out-of-scope, else false>
+  "needs_human": <true ONLY for refund / complaint / out-of-scope; NEVER for tool errors, stock-out, or product-not-found>
 }}
 
 Rules for facts_used:
@@ -522,8 +519,11 @@ def build_customer_support_agent(llm):
                     receipts.append(OrderReceipt(id=line["order_id"]))
                     receipts.append(ProductReceipt(id=line["product_id"]))
                 return payment_url, receipts
+            except ValueError as e:
+                return f"ERROR: {e}. Tell buyer this exact reason; do not escalate.", []
             except Exception as e:
-                return f"ERROR: {e}", []
+                _log.exception("create_payment_link failed business_id=%s items=%s", business_id, items)
+                return f"ERROR: internal failure: {e}", []
         return create_payment_link
 
     async def draft_reply(state: SupportAgentState) -> dict:

@@ -93,6 +93,7 @@ model Business {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   products             Product[]
   agentActions         AgentAction[]
+  agentRuns            AgentRun[]
   orders               Order[]
   goals                Goal[]
   alerts               FinanceAlert[]
@@ -132,6 +133,14 @@ enum AgentActionStatus {
   @@schema("public")
 }
 
+enum AgentRunStatus {
+  OK
+  FAILED
+  SKIPPED
+
+  @@schema("public")
+}
+
 model AgentAction {
   id           String            @id @default(cuid())
   businessId   String
@@ -154,6 +163,30 @@ model AgentAction {
   updatedAt    DateTime          @updatedAt
 
   @@map("agent_action")
+  @@schema("public")
+}
+
+model AgentRun {
+  id           String         @id @default(cuid())
+  businessId   String
+  business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  agentType    String
+  kind         String
+  summary      String
+  status       AgentRunStatus @default(OK)
+  durationMs   Int?
+  inputTokens  Int?
+  outputTokens Int?
+  cachedTokens Int?
+  costUsd      Decimal?       @db.Decimal(10, 6)
+  payload      Json           @default("{}")
+  refTable     String?
+  refId        String?
+  createdAt    DateTime       @default(now())
+
+  @@unique([refTable, refId], name: "agent_run_ref_unique")
+  @@index([businessId, agentType, createdAt])
+  @@map("agent_run")
   @@schema("public")
 }
 

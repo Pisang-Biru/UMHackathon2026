@@ -24,6 +24,12 @@ class AgentActionStatus(enum.Enum):
     AUTO_SENT = "AUTO_SENT"
 
 
+class AgentRunStatus(enum.Enum):
+    OK = "OK"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
 class MarginStatus(enum.Enum):
     OK = "OK"
     LOSS = "LOSS"
@@ -72,6 +78,25 @@ class Goal(Base):
     deletedAt = Column(DateTime, nullable=True)
 
 
+class AgentRun(Base):
+    __tablename__ = "agent_run"
+    id = Column(String, primary_key=True)
+    businessId = Column(String, nullable=False)
+    agentType = Column(String, nullable=False)
+    kind = Column(String, nullable=False)
+    summary = Column(Text, nullable=False)
+    status = Column(SAEnum(AgentRunStatus, name="AgentRunStatus"), nullable=False, default=AgentRunStatus.OK)
+    durationMs = Column(Integer, nullable=True)
+    inputTokens = Column(Integer, nullable=True)
+    outputTokens = Column(Integer, nullable=True)
+    cachedTokens = Column(Integer, nullable=True)
+    costUsd = Column(Numeric(10, 6), nullable=True)
+    payload = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    refTable = Column(String, nullable=True)
+    refId = Column(String, nullable=True)
+    createdAt = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class AgentAction(Base):
     __tablename__ = "agent_action"
     id = Column(String, primary_key=True)
@@ -82,6 +107,11 @@ class AgentAction(Base):
     confidence = Column(Float, nullable=False)
     reasoning = Column(Text, nullable=False)
     status = Column(SAEnum(AgentActionStatus, name="AgentActionStatus"), nullable=False, default=AgentActionStatus.PENDING)
+    agentType = Column(String, nullable=False, server_default="support")
+    inputTokens = Column(Integer, nullable=True)
+    outputTokens = Column(Integer, nullable=True)
+    cachedTokens = Column(Integer, nullable=True)
+    costUsd = Column(Numeric(10, 6), nullable=True)
     iterations = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     createdAt = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updatedAt = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

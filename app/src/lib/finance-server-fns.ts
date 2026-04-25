@@ -65,7 +65,12 @@ export const resolveFinanceAlert = createServerFn({ method: 'POST' })
     return { alertId: d.alertId }
   })
   .handler(async ({ data }) => {
-    await requireSession()
+    const session = await requireSession()
+    const alert = await prisma.financeAlert.findFirst({
+      where: { id: data.alertId, business: { userId: session.user.id } },
+      select: { id: true },
+    })
+    if (!alert) throw new Error('Alert not found or access denied')
     const url = `${AGENTS_URL}/finance/alerts/${data.alertId}/resolve`
     const res = await fetch(url, { method: 'POST' })
     if (!res.ok) throw new Error(`resolve failed: ${res.status}`)
