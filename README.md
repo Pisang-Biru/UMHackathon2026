@@ -8,7 +8,7 @@ Agentic commerce assistant for small Malaysian sellers. Monorepo with two deploy
 ## UMHackathon2026 Deliverables
 
 - Docs - https://drive.google.com/drive/folders/197fczmj3NKyWsrmKrzwh63-hyhJHXCYb?usp=sharing
-- Pitching video - 
+- Pitching video - https://youtu.be/mBpTMYI8uKw
 
 ## Prerequisites
 
