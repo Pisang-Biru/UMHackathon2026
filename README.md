@@ -1,111 +1,82 @@
-# Pisang Biru — UMHackathon 2026 - MicroBeezz
+<div align="center">
 
-Agentic commerce assistant for small Malaysian sellers. Monorepo with two deployable units:
+# Pisang Biru — UMHackathon2026 - MicroBeezz
 
-- `agents/` — FastAPI + LangGraph customer-support agent with pgvector-backed memory. Python 3.13, Celery worker + beat, RabbitMQ broker.
-- `app/` — TanStack Start frontend with Prisma, Better Auth, tRPC.
+**Agentic commerce assistant for Malaysian microbusiness.**
 
-## UMHackathon2026 Deliverables
+A multi-agent system that runs the seller's storefront across WhatsApp and Instagram — answering customers, reserving stock, generating payment links, posting marketing creatives, tracking goals and margins — autonomously, with human escalation when confidence is low.
 
-- Docs - https://drive.google.com/drive/folders/197fczmj3NKyWsrmKrzwh63-hyhJHXCYb?usp=sharing
-- Pitching video - https://youtu.be/mBpTMYI8uKw
+</div>
 
-## Prerequisites
 
-- Docker Desktop (or Docker Engine + Compose v2)
-- Node 20+ and `pnpm`
-- LLM credentials (OpenAI-compatible endpoint): `MODEL`, `API_KEY`, `OPENAI_API_BASE`
 
-Export the LLM creds in your shell before `./scripts/dev.sh up`, or put them in `agents/.env` which the script sources:
+---
 
-```bash
-export MODEL=gpt-4o-mini
-export API_KEY=sk-...
-export OPENAI_API_BASE=https://api.openai.com/v1
-```
+## Links
+
+- Submission Docs - https://drive.google.com/drive/folders/197fczmj3NKyWsrmKrzwh63-hyhJHXCYb?usp=sharing
+
+- Pitching Video - https://youtu.be/mBpTMYI8uKw
+
+
+## The problem
+
+Over 70% of Malaysian SMEs sell through WhatsApp and Instagram DMs. A solo seller hits a scale wall around 100 chats a day: orders get missed, stock drifts out of sync, and margins disappear into untracked discounts. Existing chatbots reply, but they don't *transact* — they don't reserve stock, generate payments, post promos, or know when to step aside for a human.
+
+## The solution
+
+- **Multi-agent, not single-prompt.** A Manager agent reviews every specialist draft (Sales, Marketing, Finance) against grounding gates and rewrites until it passes — or escalates to a human inbox.
+- **Grounded by construction.** Every reply cites fact IDs from the business's own data. Hallucinated prices, stock, or order details are rejected at the gate, not after.
+- **End-to-end commerce.** A single chat turn can answer the buyer, reserve inventory, mint a payment URL, and queue a finance follow-up. Marketing posts to Instagram on the seller's command.
+
+## Architecture
+
+![System architecture](assets/system-architecture.png)
+
+TanStack Start frontend talks to a FastAPI backend. WhatsApp and Instagram bridges feed messages into the same API. RabbitMQ brokers asynchronous work to a Celery worker pool, where the LangGraph multi-agent system runs against Postgres + pgvector for long-term memory. The dashed boundary on the right is the agent runtime — manager, sales, marketing, finance — communicating through a shared state graph.
+
+## Screenshots
+
+![Live agent dashboard](assets/dashboard.png)
+
+*Live agent dashboard — every active agent, pending approvals, success rate, and a real-time activity feed of node-level events from the manager graph.*
+
+![Sales analytics](assets/sales-page.png)
+
+*Sales page — revenue, orders, AOV, top products, and per-transaction real-margin against the buyer's chat history. Exportable to CSV.*
+
+## Tech stack
+
+FastAPI · LangGraph · Celery · RabbitMQ · Postgres + pgvector · BAAI/bge-m3 · TanStack Start · Prisma · Better Auth · tRPC · Docker Compose
 
 ## Quickstart
+
+Prerequisites: Docker Desktop, Node 20+, `pnpm`, and an OpenAI-compatible LLM (set `MODEL`, `API_KEY`, `OPENAI_API_BASE` in `agents/.env`).
 
 ```bash
 git clone https://github.com/Pisang-Biru/UMHackathon2026.git
 cd umhackathon2026
 
-# backend (Postgres + pgvector, RabbitMQ, FastAPI, Celery worker + beat)
+# backend: Postgres + pgvector, RabbitMQ, FastAPI, Celery worker + beat
 ./scripts/dev.sh up
 
-# in another terminal: TS frontend (stays on host for fast HMR)
-cd app
-pnpm install
-pnpm dev
+# frontend (separate terminal)
+cd app && pnpm install && pnpm dev
+
+# WhatsApp bridge (separate terminal, optional)
+cd whatsapp && npm install && npm run dev
 ```
 
-First run takes ~5 minutes: it builds the agents image (3 min), downloads `BAAI/bge-m3` (~2 GB, 1–2 min), runs prisma + alembic migrations, and seeds a demo business.
-
-When the stack is ready:
+First run takes ~5 minutes: it builds the agents image, downloads `BAAI/bge-m3` (~2 GB), runs Prisma + Alembic migrations, and seeds a demo business.
 
 | Service | URL |
 |---|---|
-| TS frontend | `http://localhost:3000` |
-| Agents API | `http://localhost:8000` |
-| RabbitMQ admin | `http://localhost:15672` (`guest` / `guest`) |
-| Postgres | `localhost:5433` (`postgres` / `root` / `pisangbisnes`) |
+| Frontend | http://localhost:3000 |
+| Agents API | http://localhost:8000 |
+| RabbitMQ admin | http://localhost:15672 (`guest` / `guest`) |
+| Postgres | `localhost:5433` |
 
-## Daily commands
-
-```bash
-./scripts/dev.sh up           # start everything
-./scripts/dev.sh down         # stop (volumes preserved)
-./scripts/dev.sh ps           # see container status
-./scripts/dev.sh logs         # tail api + worker
-./scripts/dev.sh logs agents-beat  # tail a specific service
-./scripts/dev.sh psql         # psql into the DB
-./scripts/dev.sh shell        # bash into agents-api
-./scripts/dev.sh seed         # re-run seed (idempotent)
-./scripts/dev.sh env          # reload services after editing agents/.env
-./scripts/dev.sh reset        # nuke volumes + rebuild from scratch
-```
-
-After editing Python in `agents/`, `uvicorn --reload` picks it up automatically. Celery worker does NOT hot-reload — restart it when task code changes:
-
-```bash
-docker compose restart agents-worker
-```
-
-## Database layout (Prisma + Alembic)
-
-This repo runs **two migrators against one Postgres database**, isolated by schema:
-
-| Schema | Owner | Tables |
-|---|---|---|
-| `public.*` | Prisma (`app/prisma/schema.prisma`) | `business`, `product`, `order`, `agent_action`, `account`, `session`, `user`, `verification`, `Todo` |
-| `agents.*` | Alembic (`agents/alembic/`) | `memory_*` (5), `agent_events`, `agents`, `business_agents`, `alembic_version` |
-
-Each migrator is configured to ignore the other's schema. **Drift between them is the intended boundary, not a bug.** Do NOT resolve drift by running `prisma db push` — that bypasses the boundary and will drop the agent runtime tables. See `docs/superpowers/specs/2026-04-25-schema-isolation-and-db-safety-design.md`.
-
-### Pulling the schema-isolation change onto an existing dev DB
-
-If you already have a seeded dev DB from before this change, run the helper script. It is idempotent and preserves all data via `ALTER TABLE ... SET SCHEMA`:
-
-```bash
-git pull
-./scripts/apply-agents-schema.sh
-```
-
-The script: pre-checks Postgres, snapshots row counts, runs `alembic upgrade head` (which applies migration `0005_isolate_agents_schema`), verifies every moved table exists under `agents.*`, restarts `agents-api` + worker + beat, re-counts to confirm zero data loss, and re-runs `upsert_registry()`. If any step fails it stops with a red ✗ and a hint — **do not** fall back to `prisma db push`; ping the channel.
-
-For a brand-new clone, no extra step is needed: `./scripts/dev.sh up` runs `agents-init` which already chains the migration.
-
-### If `prisma migrate dev` reports drift
-
-Expected: alembic-owned tables look like drift to Prisma even with the schema allowlist if a teammate's local Prisma is out of date. Fix:
-
-```bash
-cd app && pnpm install && npx prisma generate
-```
-
-If drift persists, write the migration SQL manually and apply with `prisma db execute --file <path.sql>` or `prisma migrate resolve --applied <name>`. Never `prisma db push --accept-data-loss`.
-
-## Smoke test
+Smoke test:
 
 ```bash
 curl -s -X POST http://localhost:8000/agent/support/chat \
@@ -118,56 +89,32 @@ curl -s -X POST http://localhost:8000/agent/support/chat \
   }' | jq
 ```
 
-Expected: a reply in Malay/English, optionally a payment link like `http://localhost:3000/pay/<id>`.
+Daily commands live in `./scripts/dev.sh` — `up`, `down`, `logs`, `psql`, `shell`, `seed`, `reset`.
 
-## WhatsApp bridge
-
-Minimal WhatsApp integration now lives in `whatsapp/` and runs as a separate Node service.
-
-```bash
-cd whatsapp
-npm install
-npm run dev
-```
-
-Set `WHATSAPP_BRIDGE_URL=http://localhost:3100` in `app/.env.local` to let the app's new `/$businessCode/whatsapp` page talk to the bridge.
-
-## Troubleshooting
-
-**`ERROR: old container 'pgvector' is running`** — you have a leftover container from a previous manual setup. Remove it:
-
-```bash
-docker rm -f pgvector pisang-rabbitmq
-```
-
-**First run is slow** — the bge-m3 model is ~2 GB. It downloads once into a docker volume (`hf-cache`) and is reused across restarts.
-
-**`500 Internal Server Error` on `/agent/support/chat`** — LLM creds missing. Check `echo $API_KEY` on the host, then `./scripts/dev.sh down && ./scripts/dev.sh up`.
-
-**Celery worker crashes with `SIGABRT` on macOS** — the entrypoint uses `--pool=threads` which avoids the fork-safety issue with PyTorch + Apple Silicon. If you see this, confirm the entrypoint has `--pool=threads` and not `--pool=prefork`.
-
-**Prisma migrate `P3005` (schema not empty)** — the init container runs prisma before alembic on purpose. If you manually ran alembic first on an empty DB, wipe with `./scripts/dev.sh reset`.
-
-**Postgres data gone after a compose change** — the `pg-data` named volume is independent of your code. `./scripts/dev.sh reset` explicitly destroys it. Regular `./scripts/dev.sh down` preserves it.
-
-## Project structure
+<details>
+<summary><strong>Repository structure</strong></summary>
 
 ```
 agents/                   Python backend (FastAPI + LangGraph + Celery)
   app/
-    agents/               customer_support graph
+    agents/               manager, customer_support, marketing, finance
     memory/               pgvector embedder, repo, chunker, formatter
     routers/              /agent/*, /memory/*
     worker/               Celery app + tasks
-  alembic/                SQLAlchemy migrations (memory tables)
-  scripts/                preload_embedder.py, smoke_memory.py, seed_dev.py
+    schemas/              Pydantic structured-reply contracts
+  alembic/                migrations for the agents.* schema
   tests/                  pytest suite (47 tests)
   Dockerfile              multi-role image (api/worker/beat/init)
-app/                      TypeScript frontend (TanStack + Prisma + tRPC)
-  prisma/                 schema + migrations
-  src/                    routes, components, server fns
-docs/superpowers/         specs + implementation plans
+
+app/                      TypeScript frontend (TanStack Start + Prisma + tRPC)
+  prisma/                 schema + migrations for the public.* schema
+  src/routes/             dashboard, sales, goals, inbox, products, agents, whatsapp
+
+whatsapp/                 Node service bridging WhatsApp Web ↔ agents API
+
+docs/superpowers/         design specs and implementation plans
 scripts/dev.sh            docker compose lifecycle wrapper
-scripts/apply-agents-schema.sh   one-shot teammate migration helper for the schema-isolation change
 docker-compose.yml        full dev stack
 ```
+
+</details>
