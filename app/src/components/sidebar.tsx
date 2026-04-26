@@ -49,7 +49,6 @@ const NAV_ITEMS = [
   { icon: Inbox, label: 'Inbox', route: 'inbox' },
   { icon: ShoppingBag, label: 'Products', route: 'products' },
   { icon: TrendingUp, label: 'Sales', route: 'sales' },
-  { icon: MessageCircle, label: 'WhatsApp', route: 'whatsapp' },
   { icon: CircleDot, label: 'Issues', count: 8 },
   { icon: RefreshCw, label: 'Routines' },
   { icon: Target, label: 'Goals', route: 'goals' },
@@ -213,6 +212,19 @@ export function Sidebar({
             Channels
           </p>
           <div className="space-y-0.5 mb-4">
+            <button
+              onClick={() =>
+                navigate({
+                  to: '/$businessCode/whatsapp',
+                  params: { businessCode: business.code },
+                } as any)
+              }
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors hover:bg-white/5"
+              style={{ color: '#555' }}
+            >
+              <MessageCircle size={13} />
+              <span className="flex-1 text-left">WhatsApp</span>
+            </button>
             <button
               onClick={() =>
                 navigate({

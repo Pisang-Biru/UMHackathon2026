@@ -1,9 +1,14 @@
-# Pisang Biru — UM Hackathon 2026
+# Pisang Biru — UMHackathon 2026 - MicroBeezz
 
 Agentic commerce assistant for small Malaysian sellers. Monorepo with two deployable units:
 
 - `agents/` — FastAPI + LangGraph customer-support agent with pgvector-backed memory. Python 3.13, Celery worker + beat, RabbitMQ broker.
 - `app/` — TanStack Start frontend with Prisma, Better Auth, tRPC.
+
+## UMHackathon2026 Deliverables
+
+- Docs - https://drive.google.com/drive/folders/197fczmj3NKyWsrmKrzwh63-hyhJHXCYb?usp=sharing
+- Pitching video - https://youtu.be/mBpTMYI8uKw
 
 ## Prerequisites
 
